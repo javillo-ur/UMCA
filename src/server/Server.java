@@ -15,7 +15,7 @@ import model.Party;
 import model.Player;
 
 public class Server {
-	public static List<Party> parties = Collections.synchronizedList(new LinkedList<Party>());
+	public static List<Party> parties = new LinkedList<Party>();
 	
 	public static void main(String[] args) throws UnknownHostException {
 		parties.add(new Party(0, new Player("alguien", InetAddress.getByName("www.google.com"))));

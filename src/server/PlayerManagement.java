@@ -20,8 +20,8 @@ public class PlayerManagement implements Runnable{
 	@SuppressWarnings("deprecation")
 	public void run() {
 		try{
-			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
 			ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
+			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
 			player = new Player(dis.readLine(), s.getInetAddress());
 			boolean flag = true;
 			while(!Thread.interrupted() && !s.isClosed() && flag) {
@@ -46,7 +46,9 @@ public class PlayerManagement implements Runnable{
 	}
 	
 	public void getPartidas(ObjectOutputStream dos) throws IOException {
-		dos.writeObject(Server.parties);
+		synchronized(Server.parties) {
+			dos.writeObject(Server.parties);
+		}
 		dos.flush();
 	}
 	
@@ -62,7 +64,9 @@ public class PlayerManagement implements Runnable{
 	
 	public synchronized void unirsePartida(ObjectOutputStream dos, ObjectInputStream dis) 
 			throws IOException, NullPointerException {
-		dos.writeBoolean(Server.parties.get(dis.readInt()).add(player));
+		synchronized(Server.parties) {
+			dos.writeBoolean(Server.parties.get(dis.readInt()).add(player));
+		}
 		dos.flush();
 	}
 }

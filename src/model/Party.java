@@ -25,6 +25,10 @@ public class Party implements Serializable{
 	
 	@Override
 	public String toString() {
+		return "Sala de " + owner.getName();
+	}
+	
+	public String getSummary() {
 		String ret = "Sala de " + getPlayers().get(0).getName() + "\r\n";
 		ret += "Estado: " + StatusRep.statusToString(getStatus()) + "\r\n";
 		ret += "Jugadores: " + "\r\n";
@@ -33,8 +37,8 @@ public class Party implements Serializable{
 		return ret;
 	}
 	
-	public String name() {
-		return "Sala de " + getPlayers().get(0).getName();
+	public String getName() {
+		return "Sala de " + owner.getName();
 	}
 	
 	public void startGame() {
