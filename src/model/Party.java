@@ -4,23 +4,16 @@ import java.io.Serializable;
 import java.util.LinkedList;
 import java.util.List;
 
-import server.Server;
-
 public class Party implements Serializable{
 	private static final long serialVersionUID = 1L;
 	
-	private int id;
 	private List<Player> players = new LinkedList<Player>();
 	Player owner;
 	Status status = Status.Waiting;
 	
-	public Party(int id, Player owner) {
+	public Party(Player owner) {
 		getPlayers().add(owner);
 		this.owner = owner;
-	}
-	
-	public int getId() {
-		return id;
 	}
 	
 	@Override
@@ -56,5 +49,9 @@ public class Party implements Serializable{
 	public boolean add(Player player) {
 		players.add(player);
 		return true;
+	}
+
+	public String getOwner() {
+		return this.owner.getName();
 	}
 }

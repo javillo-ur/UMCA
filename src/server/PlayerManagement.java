@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.Enumeration;
+import java.util.LinkedList;
 import java.util.List;
 
 import model.Party;
@@ -46,27 +48,25 @@ public class PlayerManagement implements Runnable{
 	}
 	
 	public void getPartidas(ObjectOutputStream dos) throws IOException {
-		synchronized(Server.parties) {
-			dos.writeObject(Server.parties);
-		}
+		Enumeration<Party> parties = Server.parties.elements();
+		List<Party> ret = new LinkedList<Party>();
+		while(parties.hasMoreElements())
+			ret.add(parties.nextElement());
+		dos.writeObject(ret);
 		dos.flush();
 	}
 	
 	public void crearPartida(ObjectOutputStream dos) throws IOException {
-		Party party;
-		synchronized(Server.parties){
-			party = new Party(Server.parties.size(), player);
-			Server.parties.add(party);
-		}
+		Party party = new Party(player);
+		Server.parties.put(player.getName(), party);
 		dos.writeObject(party);
 		dos.flush();
 	}
 	
+	@SuppressWarnings("deprecation")
 	public synchronized void unirsePartida(ObjectOutputStream dos, ObjectInputStream dis) 
-			throws IOException, NullPointerException {
-		synchronized(Server.parties) {
-			dos.writeBoolean(Server.parties.get(dis.readInt()).add(player));
-		}
+		throws IOException, NullPointerException {
+		dos.writeBoolean(Server.parties.get(dis.readLine()).add(player));
 		dos.flush();
 	}
 }

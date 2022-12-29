@@ -1,40 +1,33 @@
 package client;
 
-import java.awt.EventQueue;
-
 import javax.swing.JFrame;
 import javax.swing.JPanel;
-import javax.swing.ListModel;
 import javax.swing.border.EmptyBorder;
-
 import model.Party;
-
-import javax.swing.BoxLayout;
 import javax.swing.DefaultListModel;
-
 import java.awt.GridLayout;
 import javax.swing.JList;
-import javax.swing.JLabel;
 import java.awt.FlowLayout;
 import javax.swing.JButton;
 import java.awt.event.ActionListener;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
+import java.awt.event.WindowAdapter;
+import java.awt.event.WindowEvent;
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
-import java.io.OutputStream;
 import java.net.Socket;
 import java.util.List;
-import java.util.Scanner;
 import java.util.Timer;
-import java.util.TimerTask;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
 import java.awt.event.ActionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.ListSelectionEvent;
 
-public class SelectParty extends JFrame {
+public class SelectParty extends JFrame implements Callable<Party>{
 	private static final long serialVersionUID = 1L;
 	
 	private JPanel contentPane;
@@ -43,6 +36,14 @@ public class SelectParty extends JFrame {
 	private JButton details;
 	private DefaultListModel<Party> dlm;
 	private Socket s;
+	private Timer timer = new Timer();
+	
+	private ObjectOutputStream oos;
+	private ObjectInputStream ois;
+	
+	private CountDownLatch cd = new CountDownLatch(1);
+	
+	public Party result = null;
 	
 	public void setParties(List<Party> parties) {
 		dlm.removeAllElements();
@@ -50,23 +51,34 @@ public class SelectParty extends JFrame {
 			dlm.add(i, parties.get(i));
 	}
 
-	public SelectParty(Socket s) {
+	public SelectParty(Socket s, ExecutorService es) {
+		addWindowListener(new WindowAdapter() {
+			@Override
+			public void windowClosing(WindowEvent e) {
+				joinParty(null);
+			}
+		});
 		this.s = s;
-		ObjectOutputStream oos = null;
-		ObjectInputStream ois = null;
 		try {
 			oos = new ObjectOutputStream(s.getOutputStream());
 			ois = new ObjectInputStream(s.getInputStream());
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		
-		System.out.println("Nombre de juegador: ");
-		try (Scanner sc = new Scanner(System.in)) {
-			oos.writeBytes(sc.nextLine() + "\r\n");
-		} catch (IOException e) {
-			e.printStackTrace();
+		SelectPlayerName task = new SelectPlayerName();
+		Future<String> nameTask = es.submit(task);
+		try {
+			String name = nameTask.get();
+			name = (name == null || name.isEmpty()) ? "alguien" : name;
+			oos.writeBytes(name + "\r\n");
+		} catch (IOException e1) {
+			e1.printStackTrace();
+		} catch (InterruptedException e1) {
+			e1.printStackTrace();
+		} catch (ExecutionException e1) {
+			e1.printStackTrace();
 		}
+		task.dispose();
 		
 		setTitle("Salas de juego");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -94,6 +106,7 @@ public class SelectParty extends JFrame {
 			public void actionPerformed(ActionEvent e) {
 				Party selectedParty = list.getSelectedValue();
 				DetallesSala dialog = new DetallesSala(selectedParty, own);
+				dialog.setVisible(true);
 			}
 		});
 		details.setEnabled(false);
@@ -101,6 +114,11 @@ public class SelectParty extends JFrame {
 		
 		join = new JButton("Unirse a sala");
 		join.setEnabled(false);
+		join.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				joinParty(list.getSelectedValue());
+			}
+		});
 		panel.add(join);
 		
 		list.addListSelectionListener(new ListSelectionListener() {
@@ -110,18 +128,39 @@ public class SelectParty extends JFrame {
 				details.setEnabled(selected);
 			}
 		});
-		Timer timer = new Timer();
 		timer.schedule(new UpdateTask(dlm, oos, ois), 2000);
-		setVisible(true);
 	}
 
 	public void joinParty(Party party) {
 		try {
-			if(s != null && !s.isClosed())
+			if(s != null && !s.isClosed()) {
+				if(party != null) {
+					oos.writeInt(2);
+					oos.writeBytes(party.getOwner() + "\r\n");
+					oos.flush();
+				}
+				oos.writeInt(3);
+				oos.flush();
+				s.shutdownOutput();
 				s.close();
+			}
 		}catch(IOException e) {
 			e.printStackTrace();
 		}
+		result = party;
+		cd.countDown();
 	}
 
+	@Override
+	public Party call() throws Exception {
+		try {
+			this.setVisible(true);
+			cd.await();
+		}finally {
+			setVisible(false);
+			dispose();
+			timer.cancel();
+		}
+		return result;
+	}
 }

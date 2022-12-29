@@ -12,25 +12,14 @@ import model.Party;
 import model.Player;
 
 import java.awt.GridLayout;
-import java.util.LinkedList;
-import java.util.List;
-
 import javax.swing.JLabel;
-import javax.swing.JList;
 import java.awt.event.ActionListener;
 import java.awt.event.ActionEvent;
 
 public class DetallesSala extends JDialog {
-
+	private static final long serialVersionUID = 1L;
 	private final JPanel contentPanel = new JPanel();
 
-	/**
-	 * Launch the application.
-	 */
-
-	/**
-	 * Create the dialog.
-	 */
 	public DetallesSala(Party party, SelectParty parent) {
 		setBounds(100, 100, 450, 300);
 		this.setTitle(party.getName());
@@ -61,18 +50,6 @@ public class DetallesSala extends JDialog {
 			buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
 			getContentPane().add(buttonPane, BorderLayout.SOUTH);
 			{
-				JButton okButton = new JButton("Unirse");
-				okButton.addActionListener(new ActionListener() {
-					public void actionPerformed(ActionEvent e) {
-						parent.joinParty(party);
-						dispose();
-					}
-				});
-				okButton.setActionCommand("OK");
-				buttonPane.add(okButton);
-				getRootPane().setDefaultButton(okButton);
-			}
-			{
 				JButton cancelButton = new JButton("Salir");
 				cancelButton.addActionListener(new ActionListener() {
 					public void actionPerformed(ActionEvent e) {
@@ -83,6 +60,5 @@ public class DetallesSala extends JDialog {
 				buttonPane.add(cancelButton);
 			}
 		}
-		setVisible(true);
 	}
 }
