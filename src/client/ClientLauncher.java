@@ -8,8 +8,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 
-import model.Party;
-
 public class ClientLauncher {
 	public static void main(String[] args) {
 		Socket s = null;
@@ -23,10 +21,9 @@ public class ClientLauncher {
 					return thread;
 				}
 			});
-			Future<Party> partyTask = es.submit(new SelectParty(s, es));
-			ClientGame cg = new ClientGame(partyTask.get());
-			cg.setVisible(true);
-			es.shutdown();
+			ClientGame cg = new ClientGame(s, es);
+			Future<Result> result = es.submit(cg);
+			System.out.println(result.get());
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {

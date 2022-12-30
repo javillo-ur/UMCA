@@ -51,7 +51,7 @@ public class Party implements Serializable{
 		return true;
 	}
 
-	public String getOwner() {
-		return this.owner.getName();
+	public Player getOwner() {
+		return owner;
 	}
 }

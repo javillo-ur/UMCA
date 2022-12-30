@@ -4,6 +4,7 @@ import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 import model.Party;
+
 import javax.swing.DefaultListModel;
 import java.awt.GridLayout;
 import javax.swing.JList;
@@ -15,6 +16,7 @@ import java.awt.event.WindowEvent;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
+import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.List;
 import java.util.Timer;
@@ -27,7 +29,7 @@ import java.awt.event.ActionEvent;
 import javax.swing.event.ListSelectionListener;
 import javax.swing.event.ListSelectionEvent;
 
-public class SelectParty extends JFrame implements Callable<Party>{
+public class SelectParty extends JFrame implements Callable<PartyListener>{
 	private static final long serialVersionUID = 1L;
 	
 	private JPanel contentPane;
@@ -37,13 +39,16 @@ public class SelectParty extends JFrame implements Callable<Party>{
 	private DefaultListModel<Party> dlm;
 	private Socket s;
 	private Timer timer = new Timer();
+	private ServerSocket ss;
+	
+	private String playerName;
 	
 	private ObjectOutputStream oos;
 	private ObjectInputStream ois;
 	
 	private CountDownLatch cd = new CountDownLatch(1);
 	
-	public Party result = null;
+	public PartyListener result = null;
 	
 	public void setParties(List<Party> parties) {
 		dlm.removeAllElements();
@@ -55,30 +60,37 @@ public class SelectParty extends JFrame implements Callable<Party>{
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				joinParty(null);
+				joinParty(null, playerName);
 			}
 		});
 		this.s = s;
 		try {
 			oos = new ObjectOutputStream(s.getOutputStream());
 			ois = new ObjectInputStream(s.getInputStream());
+			oos.writeBoolean(false);
+			oos.flush();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
-		SelectPlayerName task = new SelectPlayerName();
-		Future<String> nameTask = es.submit(task);
-		try {
-			String name = nameTask.get();
-			name = (name == null || name.isEmpty()) ? "alguien" : name;
-			oos.writeBytes(name + "\r\n");
-		} catch (IOException e1) {
-			e1.printStackTrace();
-		} catch (InterruptedException e1) {
-			e1.printStackTrace();
-		} catch (ExecutionException e1) {
-			e1.printStackTrace();
+		boolean flag = false;
+		while(!flag) {
+			SelectPlayerName task = new SelectPlayerName();
+			Future<String> nameTask = es.submit(task);
+			try {
+				playerName = nameTask.get();
+				playerName = (playerName == null || playerName.isEmpty()) ? "" : playerName;
+				oos.writeBytes(playerName + "\r\n");
+				oos.flush();
+				flag = ois.readBoolean();
+			} catch (IOException e1) {
+				e1.printStackTrace();
+			} catch (InterruptedException e1) {
+				e1.printStackTrace();
+			} catch (ExecutionException e1) {
+				e1.printStackTrace();
+			}
+			task.dispose();
 		}
-		task.dispose();
 		
 		setTitle("Salas de juego");
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -100,6 +112,11 @@ public class SelectParty extends JFrame implements Callable<Party>{
 		
 		JButton btnNewButton = new JButton("Nueva sala");
 		panel.add(btnNewButton);
+		btnNewButton.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				createParty(playerName);
+			}
+		});
 		
 		details = new JButton("Ver detalles");
 		details.addActionListener(new ActionListener() {
@@ -116,7 +133,7 @@ public class SelectParty extends JFrame implements Callable<Party>{
 		join.setEnabled(false);
 		join.addActionListener(new ActionListener() {
 			public void actionPerformed(ActionEvent e) {
-				joinParty(list.getSelectedValue());
+				joinParty(list.getSelectedValue(), playerName);
 			}
 		});
 		panel.add(join);
@@ -128,31 +145,62 @@ public class SelectParty extends JFrame implements Callable<Party>{
 				details.setEnabled(selected);
 			}
 		});
-		timer.schedule(new UpdateTask(dlm, oos, ois), 2000);
+		timer.schedule(new UpdateTask(dlm, oos, ois), 0, 15000);
+	}
+	
+	private void createParty(String name) {
+		Party party = null;
+		try {
+			oos.writeInt(1);
+			oos.flush();
+			ss = new ServerSocket(0);
+			oos.writeInt(ss.getLocalPort());
+			oos.flush();
+			party = (Party)ois.readObject();
+			oos.writeInt(3);
+			oos.flush();
+			timer.cancel();
+			s.close();
+			result = new PartyListener(party, ss, name);
+			cd.countDown();
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (ClassNotFoundException e) {
+			e.printStackTrace();
+		}
 	}
 
-	public void joinParty(Party party) {
+	public void joinParty(Party party, String name) {
+		boolean failed = false;
 		try {
 			if(s != null && !s.isClosed()) {
 				if(party != null) {
 					oos.writeInt(2);
-					oos.writeBytes(party.getOwner() + "\r\n");
+					oos.writeBytes(party.getOwner().getName() + "\r\n");
 					oos.flush();
+					if(ois.readBoolean()) {
+						oos.writeInt(3);
+						oos.flush();
+						int ownerPort = ois.readInt();
+						timer.cancel();
+						s.shutdownOutput();
+						s.close();
+						result = new PartyListener(party, ownerPort, name);
+						cd.countDown();
+					} 
+					else failed = true;
 				}
-				oos.writeInt(3);
-				oos.flush();
-				s.shutdownOutput();
-				s.close();
+				else failed = true;
 			}
 		}catch(IOException e) {
 			e.printStackTrace();
 		}
-		result = party;
-		cd.countDown();
+		if(failed)
+			timer.schedule(new UpdateTask(dlm, oos, ois), 0);
 	}
 
 	@Override
-	public Party call() throws Exception {
+	public PartyListener call() throws Exception {
 		try {
 			this.setVisible(true);
 			cd.await();

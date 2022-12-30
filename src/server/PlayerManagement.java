@@ -1,5 +1,6 @@
 package server;
 
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -7,16 +8,18 @@ import java.net.Socket;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
-
+import java.util.concurrent.ExecutorService;
 import model.Party;
 import model.Player;
 
 public class PlayerManagement implements Runnable{
 	Socket s;
 	Player player;
+	ExecutorService es;
 	
-	public PlayerManagement(Socket s) {
+	public PlayerManagement(Socket s, ExecutorService es) {
 		this.s = s;
+		this.es = es;
 	}
 	
 	@SuppressWarnings("deprecation")
@@ -24,8 +27,34 @@ public class PlayerManagement implements Runnable{
 		try{
 			ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
 			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
-			player = new Player(dis.readLine(), s.getInetAddress());
+			
+			if(dis.readBoolean()) {
+				String owner = dis.readLine();
+				comenzarPartida(owner);
+				s.close();
+				return;
+			}
+			
+			String name = null;
 			boolean flag = true;
+			while(flag) {
+				name = dis.readLine();
+				if(name == null)
+					return;
+				synchronized (Server.players) {
+					if(!Server.players.contains(name)) {
+						flag = false;
+						Server.players.add(name);
+					} else {
+						dos.writeBoolean(false);
+						dos.flush();
+					}
+				}
+			}
+			player = new Player(name, s.getInetAddress());
+			dos.writeBoolean(true);
+			dos.flush();
+			flag = true;
 			while(!Thread.interrupted() && !s.isClosed() && flag) {
 				int option = dis.readInt();
 				switch(option) {
@@ -33,7 +62,7 @@ public class PlayerManagement implements Runnable{
 					getPartidas(dos);
 				break;
 				case 1:
-					crearPartida(dos);
+					crearPartida(dos, dis);
 				break;
 				case 2:
 					unirsePartida(dos, dis);
@@ -56,7 +85,8 @@ public class PlayerManagement implements Runnable{
 		dos.flush();
 	}
 	
-	public void crearPartida(ObjectOutputStream dos) throws IOException {
+	public void crearPartida(ObjectOutputStream dos, ObjectInputStream dis) throws IOException {
+		player.setUpdatePort(dis.readInt());
 		Party party = new Party(player);
 		Server.parties.put(player.getName(), party);
 		dos.writeObject(party);
@@ -64,9 +94,44 @@ public class PlayerManagement implements Runnable{
 	}
 	
 	@SuppressWarnings("deprecation")
-	public synchronized void unirsePartida(ObjectOutputStream dos, ObjectInputStream dis) 
+	public void unirsePartida(ObjectOutputStream dos, ObjectInputStream dis) 
 		throws IOException, NullPointerException {
-		dos.writeBoolean(Server.parties.get(dis.readLine()).add(player));
-		dos.flush();
+		Party party = null;
+		synchronized(Server.parties) {
+			String owner = dis.readLine();
+			party = Server.parties.get(owner);
+			if(party == null) 
+				dos.writeBoolean(false);
+			else 
+				dos.writeBoolean(party.add(player));
+			dos.writeInt(party.getOwner().getUpdatePort());
+			dos.flush();
+		}
+	}
+	
+	public void comenzarPartida(String owner) {
+		Party partida = Server.parties.get(owner);
+		if(partida != null) {
+			synchronized(Server.players) {
+				int ownerPort = partida.getOwner().getUpdatePort();
+				for(Player player : partida.getPlayers()) {
+					Server.players.remove(player.getName());
+					es.submit(new Runnable() {
+						@Override
+						public void run() {
+							try {
+								Socket s = new Socket(player.getAddress(), player.getUpdatePort());
+								DataOutputStream dos = new DataOutputStream(s.getOutputStream());
+								dos.writeInt(ownerPort);
+								dos.flush();
+								s.close();
+							} catch (IOException e) {
+								e.printStackTrace();
+							}
+						}
+					});
+				}
+			}
+		}
 	}
 }

@@ -6,7 +6,8 @@ import java.net.InetAddress;
 public class Player implements Serializable{
 	private static final long serialVersionUID = 1L;
 	private String name;
-	InetAddress add;
+	private InetAddress add;
+	private int updatePort = -1;
 	
 	public Player(String name, InetAddress inetAddress) {
 		this.name = name;
@@ -24,5 +25,17 @@ public class Player implements Serializable{
 
 	public void setName(String name) {
 		this.name = name;
+	}
+	
+	public int getUpdatePort() {
+		return updatePort;
+	}
+	
+	public void setUpdatePort(int updatePort) {
+		this.updatePort = updatePort;
+	}
+
+	public String getAddress() {
+		return add.getHostAddress();
 	}
 }
