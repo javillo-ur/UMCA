@@ -1,8 +1,9 @@
-package client;
+package graphics;
 
 import java.util.List;
 
 import javax.swing.DefaultListModel;
+import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
@@ -10,6 +11,8 @@ import javax.swing.border.EmptyBorder;
 import javax.swing.JList;
 import javax.swing.JLabel;
 import java.awt.GridLayout;
+import java.awt.event.ActionEvent;
+import java.awt.event.ActionListener;
 
 public class WaitingWindow extends JFrame {
 
@@ -18,7 +21,7 @@ public class WaitingWindow extends JFrame {
 	private JList<String> list;
 	private DefaultListModel<String> dlm = new DefaultListModel<String>();
 
-	public WaitingWindow() {
+	public WaitingWindow(String name, boolean isOwner, ClientGame parent) {
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
 		setBounds(100, 100, 450, 300);
 		contentPane = new JPanel();
@@ -30,8 +33,21 @@ public class WaitingWindow extends JFrame {
 		JLabel lblEsperandoAComienzo = new JLabel("Esperando a comienzo de partida");
 		contentPane.add(lblEsperandoAComienzo);
 		
+		dlm.add(0, name);
 		list = new JList<String>(dlm);
 		contentPane.add(list);
+		
+		if(isOwner) {
+			JButton start = new JButton();
+			start.setText("Comenzar partida");
+			contentPane.add(start);
+			start.addActionListener(new ActionListener() {
+				@Override
+				public void actionPerformed(ActionEvent e) {
+					parent.startParty();
+				}
+			});
+		}
 		pack();
 	}
 

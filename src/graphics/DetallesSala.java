@@ -1,4 +1,4 @@
-package client;
+package graphics;
 
 import java.awt.BorderLayout;
 import java.awt.FlowLayout;

@@ -1,5 +1,5 @@
 package client;
 
 public enum Phase {
-	Wait, Start
+	Wait, GetTurns, Start, CreateBoard
 }

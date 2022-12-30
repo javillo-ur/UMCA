@@ -5,6 +5,8 @@ import java.net.Socket;
 import java.net.UnknownHostException;
 import java.util.concurrent.ExecutorService;
 
+import graphics.ClientGame;
+
 public class GuestHub extends MessageHub{
 	private String ownerIp;
 	private int ownerPort;

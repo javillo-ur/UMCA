@@ -1,6 +1,5 @@
 package server;
 
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -27,14 +26,12 @@ public class PlayerManagement implements Runnable{
 		try{
 			ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
 			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
-			
 			if(dis.readBoolean()) {
 				String owner = dis.readLine();
 				comenzarPartida(owner);
 				s.close();
 				return;
 			}
-			
 			String name = null;
 			boolean flag = true;
 			while(flag) {
@@ -100,37 +97,28 @@ public class PlayerManagement implements Runnable{
 		synchronized(Server.parties) {
 			String owner = dis.readLine();
 			party = Server.parties.get(owner);
-			if(party == null) 
+			if(party == null) {
 				dos.writeBoolean(false);
-			else 
+				dos.flush();
+			}
+			else {
 				dos.writeBoolean(party.add(player));
-			dos.writeInt(party.getOwner().getUpdatePort());
-			dos.flush();
+				dos.writeInt(party.getOwner().getUpdatePort());
+				dos.flush();
+			}
 		}
 	}
 	
 	public void comenzarPartida(String owner) {
-		Party partida = Server.parties.get(owner);
-		if(partida != null) {
-			synchronized(Server.players) {
-				int ownerPort = partida.getOwner().getUpdatePort();
-				for(Player player : partida.getPlayers()) {
-					Server.players.remove(player.getName());
-					es.submit(new Runnable() {
-						@Override
-						public void run() {
-							try {
-								Socket s = new Socket(player.getAddress(), player.getUpdatePort());
-								DataOutputStream dos = new DataOutputStream(s.getOutputStream());
-								dos.writeInt(ownerPort);
-								dos.flush();
-								s.close();
-							} catch (IOException e) {
-								e.printStackTrace();
-							}
-						}
-					});
+		synchronized(Server.parties) {
+			Party partida = Server.parties.get(owner);
+			if(partida != null) {
+				synchronized(Server.players) {
+					for(Player player : partida.getPlayers()) {
+						Server.players.remove(player.getName());
+					}
 				}
+				Server.parties.remove(owner);
 			}
 		}
 	}

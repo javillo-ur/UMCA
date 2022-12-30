@@ -1,5 +1,5 @@
 package client;
 
 public enum ControlMessage {
-	StartGame
+	StartGame, CancelGame, AssignTurns
 }

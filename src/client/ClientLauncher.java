@@ -2,34 +2,31 @@ package client;
 
 import java.io.IOException;
 import java.net.Socket;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ThreadFactory;
+import graphics.ClientGame;
+import server.Server;
 
 public class ClientLauncher {
 	public static void main(String[] args) {
 		Socket s = null;
 		try{
-			s = new Socket("localhost", 5000);
-			ExecutorService es = Executors.newCachedThreadPool(new ThreadFactory() {
-				@Override
-				public Thread newThread(Runnable r) {
-					Thread thread = Executors.defaultThreadFactory().newThread(r);
-					thread.setDaemon(true);
-					return thread;
-				}
-			});
-			ClientGame cg = new ClientGame(s, es);
-			Future<Result> result = es.submit(cg);
-			System.out.println(result.get());
+			s = new Socket(Server.serverAddress, Server.serverPort);
+			ClientGame cg = new ClientGame(s);
+			Thread game = new Thread(cg);
+			game.start();
+			game.join();
+			System.out.println(cg.getResult());
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {
 			e.printStackTrace();
-		} catch (ExecutionException e) {
-			e.printStackTrace();
+		} finally {
+			if(s != null && !s.isClosed()) {
+				try {
+					s.close();
+				} catch(IOException e) {
+					e.printStackTrace();
+				}
+			}
 		}
 	}
 }

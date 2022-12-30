@@ -3,10 +3,14 @@ package client;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
+
+import graphics.ClientGame;
 
 public class OwnerHub extends MessageHub{
 	private ServerSocket ss;
@@ -72,6 +76,26 @@ public class OwnerHub extends MessageHub{
 		for(ConnectionManager cm : conns) {
 			if(cm.getIndex() != readMessage.getPort())
 				cm.send(readMessage.getMessage());
+		}
+	}
+
+	public void sendTurns() {
+		List<Integer> turns = new ArrayList<Integer>(conns.size() + 1);
+		turns.add(-1);
+		for(int i = 0; i < conns.size(); i++)
+			turns.add(i);
+		Collections.shuffle(turns);
+		int i = 0;
+		for(int turn : turns) {
+			if(turn == -1)
+				super.receiveMessage(new Message(i++, -1));
+			else conns.get(turn).send(i++);
+		}
+		if(turns.get(0) == -1) {
+			super.receiveMessage(new Message(turns.size(), -1));
+		}
+		else {
+			conns.get(turns.get(0)).send(turns.size());
 		}
 	}
 }

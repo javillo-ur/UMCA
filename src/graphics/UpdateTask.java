@@ -1,4 +1,4 @@
-package client;
+package graphics;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;

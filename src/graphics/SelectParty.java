@@ -1,4 +1,4 @@
-package client;
+package graphics;
 
 import javax.swing.JFrame;
 import javax.swing.JPanel;
@@ -27,6 +27,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.awt.event.ActionEvent;
 import javax.swing.event.ListSelectionListener;
+
+import client.PartyListener;
+import client.SelectPlayerName;
+
 import javax.swing.event.ListSelectionEvent;
 
 public class SelectParty extends JFrame implements Callable<PartyListener>{
@@ -179,9 +183,9 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 					oos.writeBytes(party.getOwner().getName() + "\r\n");
 					oos.flush();
 					if(ois.readBoolean()) {
+						int ownerPort = ois.readInt();
 						oos.writeInt(3);
 						oos.flush();
-						int ownerPort = ois.readInt();
 						timer.cancel();
 						s.shutdownOutput();
 						s.close();
