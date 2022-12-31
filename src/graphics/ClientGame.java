@@ -7,6 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.List;
+import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -21,19 +22,25 @@ import javax.swing.border.EmptyBorder;
 
 import client.ControlMessage;
 import client.GuestHub;
-import client.Message;
 import client.MessageHub;
 import client.OwnerHub;
 import client.PartyListener;
 import client.Phase;
 import client.Result;
-import minesweeper.Game;
+import minesweeper.Tile;
+import model.Message;
 import server.Server;
+
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
+import java.awt.GridLayout;
+import javax.swing.JLabel;
+import javax.swing.JTextField;
 
 public class ClientGame extends JDialog implements Runnable{
 	private static final long serialVersionUID = 1L;
+	private static final int width = 30;
+	private static final int height = 16;
 	
 	private final JPanel contentPanel = new JPanel();
 	private PartyListener party;
@@ -45,19 +52,25 @@ public class ClientGame extends JDialog implements Runnable{
 	private Phase phase = Phase.Wait;
 	
 	private int turn = -1;
-	private int numPlayers = -1;
 	
 	private Game board = null;
+	
+	private boolean stillAlive = true;
 	
 	private CountDownLatch waitStart = new CountDownLatch(1);
 	private CountDownLatch waitGetTurns = new CountDownLatch(1);
 	private CountDownLatch waitCreateBoard = new CountDownLatch(1);
 	private CountDownLatch waitGetBoard = new CountDownLatch(1);
 	private CountDownLatch waitEndGame = new CountDownLatch(1);
+	private CountDownLatch waitAction = new CountDownLatch(1);
 	
 	private WaitingWindow waitingWindow = null;
 	
+	private JButton[][] cells = new JButton[width][height];
+	
 	private MessageHub hub;
+	private JTextField txtNombreTurno;
+	private JTextField txtNumPlayers;
 
 	public ClientGame(Socket s) {
 		addWindowListener(new WindowAdapter() {
@@ -81,22 +94,46 @@ public class ClientGame extends JDialog implements Runnable{
 		contentPanel.setLayout(new FlowLayout());
 		contentPanel.setBorder(new EmptyBorder(5, 5, 5, 5));
 		getContentPane().add(contentPanel, BorderLayout.CENTER);
+		
+		JPanel panel_1 = new JPanel();
+		contentPanel.add(panel_1);
+		panel_1.setLayout(new GridLayout(1, 0, 0, 0));
+		
+		JLabel lblTurnoDe = new JLabel("Turno de:");
+		panel_1.add(lblTurnoDe);
+		
+		txtNombreTurno = new JTextField();
+		txtNombreTurno.setEnabled(false);
+		txtNombreTurno.setEditable(false);
+		panel_1.add(txtNombreTurno);
+		txtNombreTurno.setColumns(10);
+		
+		JLabel lblNDeJugadores = new JLabel("Nº de jugadores:");
+		panel_1.add(lblNDeJugadores);
+		
+		txtNumPlayers = new JTextField();
+		txtNumPlayers.setEditable(false);
+		panel_1.add(txtNumPlayers);
+		txtNumPlayers.setColumns(10);
+		
+		JLabel lblNews = new JLabel("");
+		panel_1.add(lblNews);
 		{
-			JPanel buttonPane = new JPanel();
-			buttonPane.setLayout(new FlowLayout(FlowLayout.RIGHT));
-			getContentPane().add(buttonPane, BorderLayout.SOUTH);
-			{
-				JButton okButton = new JButton("OK");
-				okButton.setActionCommand("OK");
-				buttonPane.add(okButton);
-				getRootPane().setDefaultButton(okButton);
-			}
-			{
-				JButton cancelButton = new JButton("Cancel");
-				cancelButton.setActionCommand("Cancel");
-				buttonPane.add(cancelButton);
+			JPanel panel = new JPanel();
+			contentPanel.add(panel);
+			panel.setLayout(new GridLayout(height, width, 0, 0));
+			for(int x = 0; x < width; x++) {
+				for(int y = 0; y < height; y++) {
+					JButton cell = new JButton();
+					cells[x][y] = cell;
+					panel.add(cell);
+					cell.setText("X");
+					cell.setEnabled(false);
+					cell.addActionListener(new ButtonListener(x, y, this));
+				}
 			}
 		}
+		this.pack();
 	}
 
 	public void startParty() {
@@ -119,8 +156,8 @@ public class ClientGame extends JDialog implements Runnable{
 	}
 
 	@SuppressWarnings("unchecked")
-	public synchronized void receiveMessage(Object message) {
-		Object readObject = ((Message)message).getMessage();
+	public synchronized void receiveMessage(Object message) throws InterruptedException {
+		Object readObject = ((Message<?>)message).getMessage();
 		if(readObject instanceof ControlMessage) {
 			switch((ControlMessage)readObject) {
 				case AssignTurns:
@@ -138,7 +175,10 @@ public class ClientGame extends JDialog implements Runnable{
 					if(waitingWindow != null)
 						waitingWindow.addPlayer((List<String>) readObject);
 					break;
-				case Start:
+				case CreateBoard:
+					List<String> turnNames = (List<String>)readObject;
+					board = new Game(turnNames);
+					waitCreateBoard.countDown();
 					break;
 				default:
 					break;
@@ -151,11 +191,6 @@ public class ClientGame extends JDialog implements Runnable{
 					turn = (int)readObject;
 					phase = Phase.CreateBoard;
 					waitGetTurns.countDown();
-					break;
-				case CreateBoard:
-					numPlayers = (int)readObject;
-					board = new Game(numPlayers);
-					waitCreateBoard.countDown();
 					break;
 				default:
 					break;
@@ -170,13 +205,25 @@ public class ClientGame extends JDialog implements Runnable{
 		waitCreateBoard.countDown();
 		waitGetBoard.countDown();
 		waitEndGame.countDown();
+		waitAction.countDown();
+		es.shutdown();
 	}
 
 	private void updateGame(Game game) {
+		this.board = game;
+		updateCells();
 		if(this.waitGetBoard.getCount() > 0)
 			waitGetBoard.countDown();
 		if(turn == game.getTurn()) {
-			turn();
+			try {
+				turn();
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			} catch (BrokenBarrierException e) {
+				e.printStackTrace();
+			}
+		} else {
+			setEnableCells(false);
 		}
 	}
 
@@ -201,19 +248,26 @@ public class ClientGame extends JDialog implements Runnable{
 				es.submit(new Runnable() {
 					@Override
 					public void run() {
-						requestTurns();
+						try {
+							requestTurns();
+						} catch (InterruptedException | ExecutionException e) {
+							e.printStackTrace();
+						}
 					}
 				});
 			}
 			System.out.println("Wait for turns");
 			waitGetTurns.await();
+			System.out.println("Wait for board");
 			if(turn == 0) {
+				System.out.println("I'll create the board");
 				waitCreateBoard.await();
 				hub.send(board);
-				updateGame(board);
+				firstTurn();
 			}
-			System.out.println("We will start now (I'm turn " + (turn + 1) + ")");
-			waitGetBoard.await();
+			else
+				waitGetBoard.await();
+			System.out.println("Game has started");
 			waitEndGame.await();
 		} catch (InterruptedException e1) {
 			e1.printStackTrace();
@@ -222,16 +276,72 @@ public class ClientGame extends JDialog implements Runnable{
 		}
 	}
 	
-	public void turn() {
-		System.out.println("My turn");
+	private void firstTurn() throws InterruptedException {
+		setEnableCells(true);
+		waitAction.await();
+		if(!stillAlive) {
+			result = Result.Lose;
+			waitEndGame.countDown();
+		}
+		endTurn();
 	}
 	
-	public void requestTurns() {
+	private void updateCells() {
+		for(int x = 0; x < width; x++)
+			for(int y = 0; y < height; y++) {
+				Tile tile = board.get(x, y);
+				if(tile.isDisplayed()) {
+					cells[x][y].setText(tile.isHot() ? "B" : tile.getNeighbourBombs() + "");
+				}
+			}
+	}
+
+	public void turn() throws InterruptedException, BrokenBarrierException {
+		startTurn();
+		waitAction.await();
+		if(!stillAlive) {
+			result = Result.Lose;
+		}
+		endTurn();
+	}
+	
+	public void startTurn() throws InterruptedException, BrokenBarrierException {
+		waitAction = new CountDownLatch(1);
+		setEnableCells(true);
+	}
+	
+	public void setEnableCells(boolean enabled) {
+		for(int x = 0; x < width; x++)
+			for(int y = 0; y < height; y++)
+				cells[x][y].setEnabled(enabled);
+	}
+	
+	public void endTurn() {
+		if(stillAlive)
+			board.nextTurn();
+		else
+			board.removePlayer();
+		hub.send(board);
+	}
+	
+	public void requestTurns() throws InterruptedException, ExecutionException {
 		((OwnerHub) hub).sendTurns();
 	}
 	
 	public Result getResult() {
 		dispose();
 		return result;
+	}
+
+	public synchronized void buttonClicked(int x, int y) throws InterruptedException, BrokenBarrierException {
+		Tile tile = board.click(x, y);
+		if(tile.isHot())
+			board.removePlayer();
+		else
+			board.nextTurn();
+		updateGame(board);
+		setEnableCells(false);
+		stillAlive = !tile.isHot();
+		waitAction.countDown();
 	}
 }

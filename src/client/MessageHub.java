@@ -5,6 +5,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 
 import graphics.ClientGame;
+import model.Message;
 
 public abstract class MessageHub extends Thread{
 	protected ExecutorService es;
@@ -23,7 +24,11 @@ public abstract class MessageHub extends Thread{
 		queue.add(message);
 	}
 
-	public void receiveMessage(Message readObject) {
-		window.receiveMessage(readObject);
+	public void receiveMessage(Message<?> readObject) throws InterruptedException {
+		es.submit(new NotifyMessage(readObject, window));
+	}
+
+	public void close() {
+		window.dispose();
 	}
 }

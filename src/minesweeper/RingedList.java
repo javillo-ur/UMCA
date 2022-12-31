@@ -1,29 +1,45 @@
 package minesweeper;
 
-public class RingedList {
-	private RingedListBase base;
+import java.io.Serializable;
+
+public class RingedList<T> implements Serializable {
+	private static final long serialVersionUID = 1L;
+	
+	private RingedListBase<T> base;
+	private RingedListBase<T> previous;
 	
 	public RingedList() {}
 	
-	public Tile getTile() {
+	public T getTile() {
 		return base.getTile();
 	}
 	
-	public void addTile(Tile tile) {
+	public void addTile(T tile) {
 		if(base == null)
-			base = new RingedListBase(tile);
-		else base.addLinkNext(tile);
+			base = new RingedListBase<T>(tile);
+		else {
+			if(previous == null)
+				previous = base;
+			base.addLinkNext(tile);
+		}
 	}
 	
 	public void move(int pos) {
 		base = base.move(pos);
+		if(previous != null)
+			previous = previous.move(pos);
 	}
 	
-	public Tile getTile(int pos) {
+	public T getTile(int pos) {
 		return base.getTile(pos);
 	}
 
-	public RingedListBase getBase() {
+	public RingedListBase<T> getBase() {
 		return base;
+	}
+
+	public void removeCurrent() {
+		previous.setNext(base.getNext());
+		base = base.getNext();
 	}
 }

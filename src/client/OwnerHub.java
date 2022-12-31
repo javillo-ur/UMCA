@@ -11,6 +11,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
 import graphics.ClientGame;
+import model.Message;
 
 public class OwnerHub extends MessageHub{
 	private ServerSocket ss;
@@ -37,7 +38,7 @@ public class OwnerHub extends MessageHub{
 							conns.add(cm);
 							cm.start();
 							players.add(cm.getOtherName());
-							receiveMessage(new Message(players, -1));
+							receiveMessage(new Message<List<String>>(players, -1));
 						}
 					} catch(IOException e) {
 						e.printStackTrace();
@@ -55,12 +56,10 @@ public class OwnerHub extends MessageHub{
 			public void run() {
 				while(!Thread.interrupted()) {
 					try {
-						if(!queue.isEmpty()) {
-							Object message = queue.take();
-							synchronized(conns) {
-								for(ConnectionManager cm : conns)
-									cm.send(message);
-							}
+						Object message = queue.take();
+						synchronized(conns) {
+							for(ConnectionManager cm : conns)
+								cm.send(message);
 						}
 					} catch(InterruptedException e) {
 						e.printStackTrace();
@@ -71,7 +70,7 @@ public class OwnerHub extends MessageHub{
 	}
 	
 	@Override
-	public void receiveMessage(Message readMessage) {
+	public void receiveMessage(Message<?> readMessage) throws InterruptedException {
 		super.receiveMessage(readMessage);
 		for(ConnectionManager cm : conns) {
 			if(cm.getIndex() != readMessage.getPort())
@@ -79,7 +78,7 @@ public class OwnerHub extends MessageHub{
 		}
 	}
 
-	public void sendTurns() {
+	public void sendTurns() throws InterruptedException, ExecutionException {
 		List<Integer> turns = new ArrayList<Integer>(conns.size() + 1);
 		turns.add(-1);
 		for(int i = 0; i < conns.size(); i++)
@@ -88,14 +87,20 @@ public class OwnerHub extends MessageHub{
 		int i = 0;
 		for(int turn : turns) {
 			if(turn == -1)
-				super.receiveMessage(new Message(i++, -1));
+				super.receiveMessage(new Message<Integer>(i++, -1));
 			else conns.get(turn).send(i++);
 		}
+		List<String> turnNames = new ArrayList<String>(turns.size());
+		for(i = 0; i < turns.size(); i++) {
+			if(turns.get(i) == -1)
+				turnNames.add(i, ownName);
+			else turnNames.add(i, conns.get(turns.get(i)).getOtherName());
+		}
 		if(turns.get(0) == -1) {
-			super.receiveMessage(new Message(turns.size(), -1));
+			super.receiveMessage(new Message<List<String>>(turnNames, -1));
 		}
 		else {
-			conns.get(turns.get(0)).send(turns.size());
+			conns.get(turns.get(0)).send(turnNames);
 		}
 	}
 }

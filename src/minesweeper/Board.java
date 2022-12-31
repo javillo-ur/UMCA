@@ -14,13 +14,13 @@ public class Board implements Serializable{
 	
 	private Tile[][] tiles;
 	
-	private RingedList ring;
+	private RingedList<Tile> ring;
 	
 	public Board(int height, int width, int numBombs) {
 		this.height = height;
 		this.width = width;
-		tiles = new Tile[height][width];
-		ring = new RingedList();
+		tiles = new Tile[width][height];
+		ring = new RingedList<Tile>();
 		for(int i = 0; i < height*width; i++)
 			ring.addTile(new Tile());
 		for(int i = 0; i < numBombs; i++) {
@@ -61,16 +61,49 @@ public class Board implements Serializable{
 	}
 
 	private void prepareTiles() throws InterruptedException, BrokenBarrierException {
-		RingedListBase base = ring.getBase();
+		RingedListBase<Tile> base = ring.getBase();
 		for(int y = 0; y < height; y++)
 			for(int x = 0; x < width; x++) {
 				tiles[x][y] = base.getTile();
 				base = base.getNext();
 			}
 		ExecutorService es = Executors.newCachedThreadPool();
-		CyclicBarrier cb = new CyclicBarrier(width + 1);
+		CyclicBarrier cb = new CyclicBarrier(height + 1);
 		for(int y = 0; y < height; y++)
 			es.submit(new PrepareTiles(tiles, y, width, height, cb));
 		cb.await();
+	}
+
+	public Tile click(int x, int y) {
+		Tile ret = get(x, y);
+		ret.setDisplayed();
+		if(ret.getNeighbourBombs() == 0) {
+			ExecutorService es = Executors.newFixedThreadPool(8);
+			for(Tile neighbour : ret.getNeighbours()) {
+				if(!neighbour.isDisplayed()) {
+					es.submit(new Runnable() {
+						@Override
+						public void run() {
+							propagateClick(neighbour, es);	
+						}
+					});
+				}
+			}
+		}
+		return ret;
+	}
+	
+	private void propagateClick(Tile tile, ExecutorService es) {
+		tile.setDisplayed();
+		if(tile.getNeighbourBombs() == 0) {
+			for(Tile neighbour : tile.getNeighbours()) {
+				es.submit(new Runnable() {
+					@Override
+					public void run() {
+						propagateClick(neighbour, es);
+					}
+				});
+			}
+		}
 	}
 }

@@ -11,6 +11,8 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 
+import model.Message;
+
 public class ConnectionManager extends Thread {
 	@SuppressWarnings("unused")
 	private Socket s;
@@ -20,7 +22,10 @@ public class ConnectionManager extends Thread {
 	private int port;
 	private ObjectOutputStream oos;
 	private ObjectInputStream ois;
+	
 	private Future<String> otherName;
+	private String otherNameBuffer = null;
+	
 	@SuppressWarnings("unused")
 	private String ownName;
 	@SuppressWarnings("unused")
@@ -65,28 +70,30 @@ public class ConnectionManager extends Thread {
 				public void run() {
 					while(!Thread.interrupted()) {
 						try {
-							if(!queue.isEmpty()) {
-								oos.writeObject(queue.take());
-								oos.flush();
-								oos.reset();
-							}
+							oos.writeObject(queue.take());
+							oos.flush();
+							oos.reset();
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						} catch (IOException e) {
-							e.printStackTrace();
+							es.shutdown();
 						}
 					}
 				}
 			});
+			
 			es.submit(new Runnable() {
 				@Override
 				public void run() {
 					while(!Thread.interrupted()) {
 						try {
-							parent.receiveMessage(new Message(ois.readObject(), port));
+							parent.receiveMessage(new Message<Object>(ois.readObject(), port));
 						} catch(IOException e) {
-							e.printStackTrace();
+							parent.close();
+							es.shutdown();
 						} catch (ClassNotFoundException e) {
+							e.printStackTrace();
+						} catch(InterruptedException e) {
 							e.printStackTrace();
 						}
 					}
@@ -104,6 +111,8 @@ public class ConnectionManager extends Thread {
 	}
 	
 	public String getOtherName() throws InterruptedException, ExecutionException {
-		return otherName.get();
+		if(otherNameBuffer == null)
+			otherNameBuffer = otherName.get();
+		return otherNameBuffer;
 	}
 }
