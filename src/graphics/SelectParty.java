@@ -142,6 +142,14 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 		});
 		panel.add(join);
 		
+		JButton update = new JButton("Actualizar");
+		update.addActionListener(new ActionListener() {
+			public void actionPerformed(ActionEvent e) {
+				timer.schedule(new UpdateTask(dlm, oos, ois), 0);
+			}
+		});
+		panel.add(update);
+		
 		list.addListSelectionListener(new ListSelectionListener() {
 			public void valueChanged(ListSelectionEvent e) {
 				boolean selected = list.getSelectedIndex() != -1;
@@ -163,8 +171,8 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 			party = (Party)ois.readObject();
 			oos.writeInt(3);
 			oos.flush();
-			timer.cancel();
 			s.close();
+			timer.cancel();
 			result = new PartyListener(party, ss, name);
 			cd.countDown();
 		} catch (IOException e) {

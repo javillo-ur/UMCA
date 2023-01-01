@@ -16,7 +16,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.ThreadFactory;
 
 import javax.swing.JButton;
-import javax.swing.JDialog;
+import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
 
@@ -28,7 +28,7 @@ import client.PartyListener;
 import client.Phase;
 import client.Result;
 import minesweeper.Tile;
-import model.Message;
+import model.Turn;
 import server.Server;
 
 import java.awt.event.WindowAdapter;
@@ -37,7 +37,7 @@ import java.awt.GridLayout;
 import javax.swing.JLabel;
 import javax.swing.JTextField;
 
-public class ClientGame extends JDialog implements Runnable{
+public class ClientGame extends JFrame implements Runnable{
 	private static final long serialVersionUID = 1L;
 	private static final int width = 30;
 	private static final int height = 16;
@@ -54,8 +54,6 @@ public class ClientGame extends JDialog implements Runnable{
 	private int turn = -1;
 	
 	private Game board = null;
-	
-	private boolean stillAlive = true;
 	
 	private CountDownLatch waitStart = new CountDownLatch(1);
 	private CountDownLatch waitGetTurns = new CountDownLatch(1);
@@ -76,7 +74,11 @@ public class ClientGame extends JDialog implements Runnable{
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				hub.send(ControlMessage.CancelGame);
+				try {
+					hub.send(ControlMessage.CancelGame);
+				} catch (InterruptedException e1) {
+					e1.printStackTrace();
+				}
 				cancelParty();
 			}
 		});
@@ -103,7 +105,6 @@ public class ClientGame extends JDialog implements Runnable{
 		panel_1.add(lblTurnoDe);
 		
 		txtNombreTurno = new JTextField();
-		txtNombreTurno.setEnabled(false);
 		txtNombreTurno.setEditable(false);
 		panel_1.add(txtNombreTurno);
 		txtNombreTurno.setColumns(10);
@@ -136,7 +137,7 @@ public class ClientGame extends JDialog implements Runnable{
 		this.pack();
 	}
 
-	public void startParty() {
+	public synchronized void startParty() throws InterruptedException {
 		phase = Phase.GetTurns;
 		waitingWindow.dispose();
 		setVisible(true);
@@ -157,11 +158,11 @@ public class ClientGame extends JDialog implements Runnable{
 
 	@SuppressWarnings("unchecked")
 	public synchronized void receiveMessage(Object message) throws InterruptedException {
-		Object readObject = ((Message<?>)message).getMessage();
-		if(readObject instanceof ControlMessage) {
-			switch((ControlMessage)readObject) {
+		if(message instanceof ControlMessage) {
+			switch((ControlMessage)message) {
 				case AssignTurns:
-					startParty();
+					if(phase == Phase.Wait)
+						startParty();
 				break;
 				case CancelGame:
 					cancelParty();
@@ -169,26 +170,49 @@ public class ClientGame extends JDialog implements Runnable{
 				default:
 					break;
 			}
-		} else if(readObject instanceof List) {
+		} else if(message instanceof List<?>) {
 			switch(phase) {
 				case Wait:
 					if(waitingWindow != null)
-						waitingWindow.addPlayer((List<String>) readObject);
+						waitingWindow.addPlayer((List<String>) message);
 					break;
 				case CreateBoard:
-					List<String> turnNames = (List<String>)readObject;
+					List<String> turnNames = (List<String>) message;
 					board = new Game(turnNames);
 					waitCreateBoard.countDown();
 					break;
 				default:
 					break;
 			}
-		} else if(readObject instanceof Game) {
-			updateGame((Game) readObject);
-		} else if(readObject instanceof Integer) {
+		} else if(message instanceof Game) {
+			setGame((Game) message);
+			if(turn == board.getTurn()) {
+				try {
+					turn();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} catch (BrokenBarrierException e) {
+					e.printStackTrace();
+				}
+			} 
+		} else if(message instanceof Turn) {
+			try {
+				Turn action = (Turn) message;
+				board.setRectification(action.getRectification());
+				board.click(action.getX(), action.getY());
+				if(this.turn == board.getTurn()) {
+					turn();
+				} else {
+					updateCells();
+					setEnableCells(false);
+				}
+			} catch (InterruptedException | BrokenBarrierException e1) {
+				e1.printStackTrace();
+			}
+		} else if(message instanceof Integer) {
 			switch(phase) {
 				case GetTurns:
-					turn = (int)readObject;
+					turn = (int)message;
 					phase = Phase.CreateBoard;
 					waitGetTurns.countDown();
 					break;
@@ -209,26 +233,14 @@ public class ClientGame extends JDialog implements Runnable{
 		es.shutdown();
 	}
 
-	private void updateGame(Game game) {
+	private void setGame(Game game) {
 		this.board = game;
-		updateCells();
+		this.txtNombreTurno.setText(board.getTurnName());
+		this.txtNumPlayers.setText(board.getNumPlayers() + "");
 		if(this.waitGetBoard.getCount() > 0)
 			waitGetBoard.countDown();
-		if(turn == game.getTurn()) {
-			try {
-				turn();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			} catch (BrokenBarrierException e) {
-				e.printStackTrace();
-			}
-		} else {
+		if(turn != game.getTurn())
 			setEnableCells(false);
-		}
-	}
-
-	public void sendMessage(Object writeObject) {
-		hub.send(writeObject);
 	}
 
 	@Override
@@ -242,48 +254,47 @@ public class ClientGame extends JDialog implements Runnable{
 			hub.start();
 			waitingWindow = new WaitingWindow(party.getPlayerName(), party.isOwner(), this);
 			waitingWindow.setVisible(true);
-			System.out.println("Wait to start");
 			waitStart.await();
 			if(party.isOwner()) {
 				es.submit(new Runnable() {
 					@Override
 					public void run() {
+						Thread.currentThread().setName("Establecer turnos");
 						try {
-							requestTurns();
+							((OwnerHub) hub).sendTurns();
 						} catch (InterruptedException | ExecutionException e) {
 							e.printStackTrace();
 						}
 					}
 				});
 			}
-			System.out.println("Wait for turns");
 			waitGetTurns.await();
-			System.out.println("Wait for board");
 			if(turn == 0) {
-				System.out.println("I'll create the board");
 				waitCreateBoard.await();
 				hub.send(board);
-				firstTurn();
+				es.submit(new Runnable() {
+					@Override
+					public void run() {
+						Thread.currentThread().setName("Comenzar turno");
+						try {
+							turn();
+						} catch (InterruptedException e) {
+							e.printStackTrace();
+						} catch (BrokenBarrierException e) {
+							e.printStackTrace();
+						}	
+					}
+				});
 			}
-			else
+			else {
 				waitGetBoard.await();
-			System.out.println("Game has started");
+			}
 			waitEndGame.await();
 		} catch (InterruptedException e1) {
 			e1.printStackTrace();
 		} catch (ExecutionException e1) {
 			e1.printStackTrace();
 		}
-	}
-	
-	private void firstTurn() throws InterruptedException {
-		setEnableCells(true);
-		waitAction.await();
-		if(!stillAlive) {
-			result = Result.Lose;
-			waitEndGame.countDown();
-		}
-		endTurn();
 	}
 	
 	private void updateCells() {
@@ -297,16 +308,13 @@ public class ClientGame extends JDialog implements Runnable{
 	}
 
 	public void turn() throws InterruptedException, BrokenBarrierException {
-		startTurn();
-		waitAction.await();
-		if(!stillAlive) {
-			result = Result.Lose;
+		if(board.isEnded()) {
+			if(result == Result.Error)
+				result = Result.Win;
+			waitEndGame.countDown();
 		}
-		endTurn();
-	}
-	
-	public void startTurn() throws InterruptedException, BrokenBarrierException {
-		waitAction = new CountDownLatch(1);
+		if(board.isInitialised())
+			updateCells();
 		setEnableCells(true);
 	}
 	
@@ -316,18 +324,6 @@ public class ClientGame extends JDialog implements Runnable{
 				cells[x][y].setEnabled(enabled);
 	}
 	
-	public void endTurn() {
-		if(stillAlive)
-			board.nextTurn();
-		else
-			board.removePlayer();
-		hub.send(board);
-	}
-	
-	public void requestTurns() throws InterruptedException, ExecutionException {
-		((OwnerHub) hub).sendTurns();
-	}
-	
 	public Result getResult() {
 		dispose();
 		return result;
@@ -335,13 +331,13 @@ public class ClientGame extends JDialog implements Runnable{
 
 	public synchronized void buttonClicked(int x, int y) throws InterruptedException, BrokenBarrierException {
 		Tile tile = board.click(x, y);
-		if(tile.isHot())
-			board.removePlayer();
-		else
-			board.nextTurn();
-		updateGame(board);
+		if(tile.isHot()) {
+			result = Result.Lose;
+			waitEndGame.countDown();
+		}
+		hub.send(board.lastTurnSummary());
+		updateCells();
 		setEnableCells(false);
-		stillAlive = !tile.isHot();
 		waitAction.countDown();
 	}
 }

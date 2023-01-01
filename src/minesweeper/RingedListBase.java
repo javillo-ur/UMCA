@@ -29,7 +29,7 @@ public class RingedListBase<T> implements Serializable{
 
 	public RingedListBase<T> move(int pos) {
 		RingedListBase<T> it = this;
-		for(int i = 0; i < pos - 1; i++)
+		for(int i = 0; i < pos; i++)
 			it = it.next;
 		return it;
 	}

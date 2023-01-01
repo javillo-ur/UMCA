@@ -18,7 +18,7 @@ public class ButtonListener implements ActionListener {
 	@Override
 	public void actionPerformed(ActionEvent e) {
 		try {
-				cg.buttonClicked(x, y);
+			cg.buttonClicked(x, y);
 		}catch(InterruptedException | BrokenBarrierException ex) {
 			ex.printStackTrace();
 		}

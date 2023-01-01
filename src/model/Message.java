@@ -2,22 +2,32 @@ package model;
 
 import java.io.Serializable;
 
-public class Message<T> implements Serializable{
+public class Message implements Serializable{
 	private static final long serialVersionUID = 1L;
 	
-	private T message;
+	private Object message;
 	private int port;
+	private int order;
 	
-	public Message(T message, int port) {
+	public Message(Object message, int port, int order) {
 		this.message = message;
 		this.port = port;
+		this.order = order;
 	}
 
-	public T getMessage() {
+	public Object getMessage() {
 		return message;
 	}
 	
 	public int getPort() {
 		return port;
+	}
+	
+	public int getOrder() {
+		return order;
+	}
+
+	public void setPort(int port2) {
+		this.port = port2;
 	}
 }

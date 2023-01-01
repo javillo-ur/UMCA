@@ -1,7 +1,11 @@
 package client;
 
+import java.awt.Frame;
 import java.io.IOException;
 import java.net.Socket;
+
+import javax.swing.JOptionPane;
+
 import graphics.ClientGame;
 import server.Server;
 
@@ -14,7 +18,18 @@ public class ClientLauncher {
 			Thread game = new Thread(cg);
 			game.start();
 			game.join();
-			System.out.println(cg.getResult());
+			Frame frame = new Frame();
+			switch(cg.getResult()) {
+			case Win:
+				JOptionPane.showMessageDialog(frame, "Has ganado");
+				break;
+			case Lose:
+				JOptionPane.showMessageDialog(frame, "Has perdido");
+				break;
+			case Error:
+				JOptionPane.showMessageDialog(frame, "La partida ha acabado de forma inesperada");
+				break;
+			}
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {

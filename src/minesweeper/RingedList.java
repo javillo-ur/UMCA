@@ -5,6 +5,8 @@ import java.io.Serializable;
 public class RingedList<T> implements Serializable {
 	private static final long serialVersionUID = 1L;
 	
+	private int length = 0;
+	
 	private RingedListBase<T> base;
 	private RingedListBase<T> previous;
 	
@@ -22,6 +24,7 @@ public class RingedList<T> implements Serializable {
 				previous = base;
 			base.addLinkNext(tile);
 		}
+		length++;
 	}
 	
 	public void move(int pos) {
@@ -39,7 +42,16 @@ public class RingedList<T> implements Serializable {
 	}
 
 	public void removeCurrent() {
-		previous.setNext(base.getNext());
-		base = base.getNext();
+		if(previous != null) {
+			previous.setNext(base.getNext());
+			base = base.getNext();
+		} else {
+			base = null;
+		}
+		length--;
+	}
+	
+	public int getLength() {
+		return length;
 	}
 }

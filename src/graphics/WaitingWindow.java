@@ -44,7 +44,11 @@ public class WaitingWindow extends JFrame {
 			start.addActionListener(new ActionListener() {
 				@Override
 				public void actionPerformed(ActionEvent e) {
-					parent.startParty();
+					try {
+						parent.startParty();
+					} catch (InterruptedException e1) {
+						e1.printStackTrace();
+					}
 				}
 			});
 		}

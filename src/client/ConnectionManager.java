@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -22,6 +24,11 @@ public class ConnectionManager extends Thread {
 	private int port;
 	private ObjectOutputStream oos;
 	private ObjectInputStream ois;
+	
+	private int order = 0;
+	private int orderReceive = 0;
+	
+	private HashMap<Integer, Message> buffer = new LinkedHashMap<Integer, Message>();
 	
 	private Future<String> otherName;
 	private String otherNameBuffer = null;
@@ -70,7 +77,9 @@ public class ConnectionManager extends Thread {
 				public void run() {
 					while(!Thread.interrupted()) {
 						try {
-							oos.writeObject(queue.take());
+							Message mess = new Message(queue.take(), port, order);
+							order++;
+							oos.writeObject(mess);
 							oos.flush();
 							oos.reset();
 						} catch (InterruptedException e) {
@@ -87,7 +96,19 @@ public class ConnectionManager extends Thread {
 				public void run() {
 					while(!Thread.interrupted()) {
 						try {
-							parent.receiveMessage(new Message<Object>(ois.readObject(), port));
+							Message received = (Message)ois.readObject();
+							if(received.getOrder() == orderReceive) {
+								orderReceive++;
+								parent.receiveMessage(received.getMessage(), port);
+								while(buffer.containsKey(orderReceive)) {
+									Message buffered = buffer.get(orderReceive);
+									buffer.remove(orderReceive);
+									parent.receiveMessage(buffered.getMessage(), port);
+									orderReceive++;
+								}
+							} else {
+								buffer.put(received.getOrder(), received);
+							}
 						} catch(IOException e) {
 							parent.close();
 							es.shutdown();
@@ -106,8 +127,8 @@ public class ConnectionManager extends Thread {
 		}
 	}
 
-	public void send(Object message) {
-		queue.add(message);
+	public void send(Object message) throws InterruptedException {
+		queue.put(message);
 	}
 	
 	public String getOtherName() throws InterruptedException, ExecutionException {

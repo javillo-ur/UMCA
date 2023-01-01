@@ -4,14 +4,12 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
 import graphics.ClientGame;
-import model.Message;
 
 public class OwnerHub extends MessageHub{
 	private ServerSocket ss;
@@ -38,7 +36,7 @@ public class OwnerHub extends MessageHub{
 							conns.add(cm);
 							cm.start();
 							players.add(cm.getOtherName());
-							receiveMessage(new Message<List<String>>(players, -1));
+							receiveMessage(players, -1);
 						}
 					} catch(IOException e) {
 						e.printStackTrace();
@@ -70,24 +68,25 @@ public class OwnerHub extends MessageHub{
 	}
 	
 	@Override
-	public void receiveMessage(Message<?> readMessage) throws InterruptedException {
-		super.receiveMessage(readMessage);
+	public void receiveMessage(Object readMessage, int port) throws InterruptedException {
+		super.receiveMessage(readMessage, -1);
 		for(ConnectionManager cm : conns) {
-			if(cm.getIndex() != readMessage.getPort())
-				cm.send(readMessage.getMessage());
+			if(cm.getIndex() != port)
+				cm.send(readMessage);
 		}
 	}
 
 	public void sendTurns() throws InterruptedException, ExecutionException {
 		List<Integer> turns = new ArrayList<Integer>(conns.size() + 1);
-		turns.add(-1);
 		for(int i = 0; i < conns.size(); i++)
 			turns.add(i);
-		Collections.shuffle(turns);
+		turns.add(-1);
+		//ToDo: que se barajee
+		//Collections.shuffle(turns);
 		int i = 0;
 		for(int turn : turns) {
 			if(turn == -1)
-				super.receiveMessage(new Message<Integer>(i++, -1));
+				super.receiveMessage(i++, -1);
 			else conns.get(turn).send(i++);
 		}
 		List<String> turnNames = new ArrayList<String>(turns.size());
@@ -97,10 +96,10 @@ public class OwnerHub extends MessageHub{
 			else turnNames.add(i, conns.get(turns.get(i)).getOtherName());
 		}
 		if(turns.get(0) == -1) {
-			super.receiveMessage(new Message<List<String>>(turnNames, -1));
+			super.receiveMessage(turnNames, -1);
 		}
 		else {
-			conns.get(turns.get(0)).send(turnNames);
+			receiveMessage(turnNames, -1);
 		}
 	}
 }
