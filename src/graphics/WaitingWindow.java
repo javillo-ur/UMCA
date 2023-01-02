@@ -20,6 +20,7 @@ public class WaitingWindow extends JFrame {
 	private JPanel contentPane;
 	private JList<String> list;
 	private DefaultListModel<String> dlm = new DefaultListModel<String>();
+	private JButton start = null;
 
 	public WaitingWindow(String name, boolean isOwner, ClientGame parent) {
 		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
@@ -38,7 +39,8 @@ public class WaitingWindow extends JFrame {
 		contentPane.add(list);
 		
 		if(isOwner) {
-			JButton start = new JButton();
+			start = new JButton();
+			start.setEnabled(false);
 			start.setText("Comenzar partida");
 			contentPane.add(start);
 			start.addActionListener(new ActionListener() {
@@ -58,6 +60,8 @@ public class WaitingWindow extends JFrame {
 	public void addPlayer(List<String> readObject) {
 		dlm.clear();
 		dlm.addAll(readObject);
+		if(start != null && readObject.size() > 1)
+			start.setEnabled(true);
 		pack();
 	}
 }

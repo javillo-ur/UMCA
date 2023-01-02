@@ -14,6 +14,8 @@ public class Game implements Serializable{
 	private static final long serialVersionUID = 1L;
 	
 	private int rectification = -1;
+	
+	private int milliseconds = 10000;
 
 	private RingedList<Message> turnNames;
 	private Board board = new Board(16, 30, 99);
@@ -42,6 +44,11 @@ public class Game implements Serializable{
 	}
 	
 	public Tile click(int x, int y) throws InterruptedException, BrokenBarrierException {
+		if(x == -1) {
+			removePlayer();
+			return null;
+		}
+		
 		if(firstClick) {
 			rectification = board.rectify(x, y, rectification);
 			firstClick = false;
@@ -83,5 +90,11 @@ public class Game implements Serializable{
 	
 	public void setRectification(int rectification) {
 		this.rectification = rectification;
+	}
+	
+	public int getMillis() {
+		int ret = milliseconds;
+		milliseconds = (int) Math.round(ret * 0.9);
+		return ret;
 	}
 }

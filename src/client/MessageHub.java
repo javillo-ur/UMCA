@@ -23,7 +23,7 @@ public abstract class MessageHub extends Thread{
 		queue.put(message);
 	}
 
-	public void receiveMessage(Object readObject, int port) throws InterruptedException {
+	public synchronized void receiveMessage(Object readObject, int port) throws InterruptedException {
 		window.receiveMessage(readObject);
 	}
 

@@ -7,6 +7,7 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
 import java.util.List;
+import java.util.Timer;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutionException;
@@ -19,6 +20,8 @@ import javax.swing.JButton;
 import javax.swing.JFrame;
 import javax.swing.JPanel;
 import javax.swing.border.EmptyBorder;
+
+import org.apache.commons.lang3.time.StopWatch;
 
 import client.ControlMessage;
 import client.GuestHub;
@@ -70,6 +73,10 @@ public class ClientGame extends JFrame implements Runnable{
 	private MessageHub hub;
 	private JTextField txtNombreTurno;
 	private JTextField txtNumPlayers;
+	private JLabel lblTimer;
+	
+	private Timer timer;
+	private boolean defuse = false;
 
 	public ClientGame(Socket s) {
 		addWindowListener(new WindowAdapter() {
@@ -118,8 +125,8 @@ public class ClientGame extends JFrame implements Runnable{
 		panel_1.add(txtNumPlayers);
 		txtNumPlayers.setColumns(10);
 		
-		JLabel lblNews = new JLabel("");
-		panel_1.add(lblNews);
+		lblTimer = new JLabel("");
+		panel_1.add(lblTimer);
 		{
 			JPanel panel = new JPanel();
 			contentPanel.add(panel);
@@ -135,6 +142,7 @@ public class ClientGame extends JFrame implements Runnable{
 				}
 			}
 		}
+		
 		this.pack();
 		this.setExtendedState(MAXIMIZED_BOTH);
 	}
@@ -156,6 +164,29 @@ public class ClientGame extends JFrame implements Runnable{
 			hub.send(ControlMessage.AssignTurns);
 		}
 		waitStart.countDown();
+	}
+	
+	public void printTime(long l) throws InterruptedException, BrokenBarrierException {
+		long seconds = Math.floorDiv(l, 1000);
+		long millis = l - (seconds * 1000);
+		lblTimer.setText(seconds + ":" + millis);
+		if(l <= 0 && !defuse) {
+			synchronized(this) {
+				result = Result.Lose;
+				hub.signalEndGame();
+				board.click(-1, -1);
+				hub.send(board.lastTurnSummary());
+				updateCells();
+				setEnableCells(false);
+				eraseTime();
+				waitAction.countDown();
+			}
+		}
+	}
+	
+	private void eraseTime() {
+		timer.cancel();
+		lblTimer.setText("");
 	}
 
 	@SuppressWarnings("unchecked")
@@ -300,13 +331,15 @@ public class ClientGame extends JFrame implements Runnable{
 	}
 	
 	private void updateCells() {
-		for(int x = 0; x < width; x++)
-			for(int y = 0; y < height; y++) {
-				Tile tile = board.get(x, y);
-				if(tile.isDisplayed()) {
-					cells[x][y].setText(tile.isHot() ? "B" : tile.getNeighbourBombs() + "");
+		if(board.isInitialised()) {
+			for(int x = 0; x < width; x++)
+				for(int y = 0; y < height; y++) {
+					Tile tile = board.get(x, y);
+					if(tile.isDisplayed()) {
+						cells[x][y].setText(tile.isHot() ? "B" : tile.getNeighbourBombs() + "");
+					}
 				}
-			}
+		}
 		this.txtNombreTurno.setText(board.getTurnName());
 		this.txtNumPlayers.setText("" + board.getNumPlayers());
 	}
@@ -319,10 +352,19 @@ public class ClientGame extends JFrame implements Runnable{
 		} else {
 			if(board.isInitialised())
 				updateCells();
+			setTimer(board.getMillis());
 			setEnableCells(true);
 		}
 	}
 	
+	private void setTimer(int millis) {
+		StopWatch sw = new StopWatch();
+		sw.start();
+		timer = new Timer();
+		timer.schedule(new PrintTime(sw, this, millis), 0, 50);
+		defuse = false;
+	}
+
 	public void setEnableCells(boolean enabled) {
 		for(int x = 0; x < width; x++)
 			for(int y = 0; y < height; y++)
@@ -335,6 +377,7 @@ public class ClientGame extends JFrame implements Runnable{
 	}
 
 	public synchronized void buttonClicked(int x, int y) throws InterruptedException, BrokenBarrierException {
+		defuse = true;
 		Tile tile = board.click(x, y);
 		if(tile.isHot()) {
 			result = Result.Lose;
@@ -343,6 +386,7 @@ public class ClientGame extends JFrame implements Runnable{
 		hub.send(board.lastTurnSummary());
 		updateCells();
 		setEnableCells(false);
+		eraseTime();
 		waitAction.countDown();
 	}
 	

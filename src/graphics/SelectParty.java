@@ -29,7 +29,6 @@ import java.awt.event.ActionEvent;
 import javax.swing.event.ListSelectionListener;
 
 import client.PartyListener;
-import client.SelectPlayerName;
 
 import javax.swing.event.ListSelectionEvent;
 

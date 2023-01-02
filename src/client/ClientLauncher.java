@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.net.Socket;
 
 import graphics.ClientGame;
+import graphics.ResultWindow;
 import server.Server;
 
 public class ClientLauncher {
@@ -14,23 +15,11 @@ public class ClientLauncher {
 			game.setDaemon(true);
 			game.start();
 			game.join();
-			switch(cg.getResult()) {
-				case Win:
-					System.out.println("Has ganado");
-					break;
-				case Lose:
-					System.out.println("Has perdido");
-					break;
-				case Error:
-					System.out.println("La partida ha acabado de forma inesperada");
-					break;
-				case Cancelled:
-					System.out.println("Se ha cancelado la ejecución");
-					break;
-				default:
-					break;
-			}
+			Result result = cg.getResult();
 			cg.dispose();
+			
+			ResultWindow rw = new ResultWindow(result);
+			rw.setVisible(true);
 		} catch (IOException e) {
 			e.printStackTrace();
 		} catch (InterruptedException e) {

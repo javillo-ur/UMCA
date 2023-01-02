@@ -1,4 +1,5 @@
-/server/
-/minesweeper/
-/graphics/
 /client/
+/graphics/
+/minesweeper/
+/model/
+/server/
