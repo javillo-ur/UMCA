@@ -79,9 +79,11 @@ public class ConnectionManager extends Thread {
 						try {
 							Message mess = new Message(queue.take(), port, order);
 							order++;
-							oos.writeObject(mess);
-							oos.flush();
-							oos.reset();
+							synchronized(oos) {
+								oos.writeObject(mess);
+								oos.flush();
+								oos.reset();
+							}
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						} catch (IOException e) {
@@ -96,18 +98,23 @@ public class ConnectionManager extends Thread {
 				public void run() {
 					while(!Thread.interrupted()) {
 						try {
-							Message received = (Message)ois.readObject();
-							if(received.getOrder() == orderReceive) {
-								orderReceive++;
-								parent.receiveMessage(received.getMessage(), port);
-								while(buffer.containsKey(orderReceive)) {
-									Message buffered = buffer.get(orderReceive);
-									buffer.remove(orderReceive);
-									parent.receiveMessage(buffered.getMessage(), port);
-									orderReceive++;
-								}
+							Object receivedObject = ois.readObject();
+							if(receivedObject instanceof ControlMessage && ((ControlMessage) receivedObject) == ControlMessage.Kill) {
+								parent.endParty();
 							} else {
-								buffer.put(received.getOrder(), received);
+								Message received = (Message) receivedObject;
+								if(received.getOrder() == orderReceive) {
+									orderReceive++;
+									parent.receiveMessage(received.getMessage(), port);
+									while(buffer.containsKey(orderReceive)) {
+										Message buffered = buffer.get(orderReceive);
+										buffer.remove(orderReceive);
+										parent.receiveMessage(buffered.getMessage(), port);
+										orderReceive++;
+									}
+								} else {
+									buffer.put(received.getOrder(), received);
+								}
 							}
 						} catch(IOException e) {
 							parent.close();
@@ -135,5 +142,13 @@ public class ConnectionManager extends Thread {
 		if(otherNameBuffer == null)
 			otherNameBuffer = otherName.get();
 		return otherNameBuffer;
+	}
+
+	public void killSignal() throws IOException {
+		synchronized(oos) {
+			oos.writeObject(ControlMessage.Kill);
+			oos.flush();
+			s.close();
+		}
 	}
 }

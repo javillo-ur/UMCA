@@ -5,15 +5,18 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Random;
 import java.util.concurrent.BrokenBarrierException;
-import java.util.concurrent.Callable;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.TimeUnit;
 
 public class Board implements Serializable{
 	private static final long serialVersionUID = 1L;
 	private int height;
 	private int width;
+	
+	private int blankPos;
 	
 	private Tile[][] tiles;
 	
@@ -26,16 +29,26 @@ public class Board implements Serializable{
 		ring = new RingedList<Tile>();
 		for(int i = 0; i < height*width; i++)
 			ring.addTile(new Tile());
+		Random rand = new Random();
+		blankPos = rand.nextInt(width * height);
+		List<Integer> safeSpaces = new LinkedList<Integer>();
+		for(int x = -1; x < 2; x++) {
+			for(int y = -1; y < 2; y++) {
+				safeSpaces.add(blankPos + (y * width) + x);
+			}
+		}
 		for(int i = 0; i < numBombs; i++) {
-			Random rand = new Random();
-			Tile bomb = ring.getTile(rand.nextInt(width * height));
-			while(bomb.isHot()) {
-				bomb = ring.getTile(rand.nextInt(width * height));
+			int nextPos = rand.nextInt(width * height);
+			Tile bomb = ring.getTile(nextPos);
+			while(safeSpaces.contains(nextPos) || bomb.isHot()) {
+				nextPos = rand.nextInt(width * height);
+				bomb = ring.getTile(nextPos);
 			}
 			bomb.setHot();
 		}
+		
 	}
-	
+
 	public int getHeight() {
 		return height;
 	}
@@ -59,14 +72,15 @@ public class Board implements Serializable{
 			return rectification;
 		} else {
 			int posClick = y * width + x;
-			Random rand = new Random();
-			int turn = rand.nextInt(height*width);
-			while(ring.getTile(turn + posClick).isHot()) {
-				turn = rand.nextInt();
+			int turn;
+			if(posClick < blankPos) {
+				turn = blankPos - posClick;
+			} else {
+				turn = ring.getLength() - posClick + blankPos;
 			}
-			ring.move(turn + posClick);
+			ring.move(turn);
 			prepareTiles();
-			return turn + posClick;
+			return turn;
 		}
 	}
 
@@ -89,22 +103,27 @@ public class Board implements Serializable{
 		Tile ret = get(x, y);
 		ret.setDisplayed();
 		if(ret.getNeighbourBombs() == 0) {
-			ExecutorService es = Executors.newFixedThreadPool(8);
-			List<Callable<Void>> propagations = new LinkedList<Callable<Void>>();
+			ExecutorService es = Executors.newCachedThreadPool(new ThreadFactory() {
+				@Override
+				public Thread newThread(Runnable r) {
+					Thread thread = new Thread(r);
+					thread.setDaemon(true);
+					return thread;
+				}
+			});
 			for(Tile neighbour : ret.getNeighbours()) {
 				if(!neighbour.isDisplayed()) {
-					propagations.add(new Callable<Void>() {
+					es.submit(new Runnable() {
 						@Override
-						public Void call() {
+						public void run() {
 							Thread.currentThread().setName("Expandir click");
 							propagateClick(neighbour, es);
-							return null;
 						}
 					});
 				}
 			}
 			try {
-				es.invokeAll(propagations);
+				es.awaitTermination(5, TimeUnit.SECONDS);
 			} catch (InterruptedException e) {
 				e.printStackTrace();
 			}
@@ -116,13 +135,15 @@ public class Board implements Serializable{
 		tile.setDisplayed();
 		if(tile.getNeighbourBombs() == 0) {
 			for(Tile neighbour : tile.getNeighbours()) {
-				es.submit(new Runnable() {
-					@Override
-					public void run() {
-						Thread.currentThread().setName("Expandir click");
-						propagateClick(neighbour, es);
-					}
-				});
+				if(!neighbour.isDisplayed()) {
+					es.submit(new Runnable() {
+						@Override
+						public void run() {
+							Thread.currentThread().setName("Expandir click");
+							propagateClick(neighbour, es);
+						}
+					});
+				}
 			}
 		}
 	}

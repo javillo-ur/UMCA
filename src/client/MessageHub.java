@@ -30,4 +30,12 @@ public abstract class MessageHub extends Thread{
 	public void close() {
 		window.dispose();
 	}
+
+	public void signalEndGame() throws InterruptedException {
+		send(ControlMessage.OutOfGame);
+	}
+
+	public void endParty() {
+		window.endParty();
+	}
 }

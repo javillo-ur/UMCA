@@ -52,6 +52,8 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 	
 	private CountDownLatch cd = new CountDownLatch(1);
 	
+	private boolean aborted = false;
+	
 	public PartyListener result = null;
 	
 	public void setParties(List<Party> parties) {
@@ -82,10 +84,14 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 			Future<String> nameTask = es.submit(task);
 			try {
 				playerName = nameTask.get();
-				playerName = (playerName == null || playerName.isEmpty()) ? "" : playerName;
-				oos.writeBytes(playerName + "\r\n");
-				oos.flush();
-				flag = ois.readBoolean();
+				if(playerName == null) {
+					flag = true;
+				} else {
+					playerName = (playerName.isEmpty()) ? "" : playerName;
+					oos.writeBytes(playerName + "\r\n");
+					oos.flush();
+					flag = ois.readBoolean();
+				}
 			} catch (IOException e1) {
 				e1.printStackTrace();
 			} catch (InterruptedException e1) {
@@ -95,69 +101,72 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 			}
 			task.dispose();
 		}
-		
-		setTitle("Salas de juego");
-		setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
-		setBounds(100, 100, 411, 300);
-		contentPane = new JPanel();
-		contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
+		if(playerName == null) {
+			aborted = true;
+		} else {
+			setTitle("Salas de juego");
+			setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+			setBounds(100, 100, 411, 300);
+			contentPane = new JPanel();
+			contentPane.setBorder(new EmptyBorder(5, 5, 5, 5));
 
-		setContentPane(contentPane);
-		contentPane.setLayout(new GridLayout(0, 2, 0, 0));
+			setContentPane(contentPane);
+			contentPane.setLayout(new GridLayout(0, 2, 0, 0));
 		
-		dlm = new DefaultListModel<Party>();
-		JList<Party> list = new JList<Party>(dlm);
-		list.setSelectedIndex(-1);
-		contentPane.add(list);
+			dlm = new DefaultListModel<Party>();
+			JList<Party> list = new JList<Party>(dlm);
+			list.setSelectedIndex(-1);
+			contentPane.add(list);
 		
-		JPanel panel = new JPanel();
-		contentPane.add(panel);
-		panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
+			JPanel panel = new JPanel();
+			contentPane.add(panel);
+			panel.setLayout(new FlowLayout(FlowLayout.CENTER, 5, 5));
 		
-		JButton btnNewButton = new JButton("Nueva sala");
-		panel.add(btnNewButton);
-		btnNewButton.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				createParty(playerName);
-			}
-		});
+			JButton btnNewButton = new JButton("Nueva sala");
+			panel.add(btnNewButton);
+			btnNewButton.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					createParty(playerName);
+				}
+			});
 		
-		details = new JButton("Ver detalles");
-		details.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				Party selectedParty = list.getSelectedValue();
-				DetallesSala dialog = new DetallesSala(selectedParty, own);
-				dialog.setVisible(true);
-			}
-		});
-		details.setEnabled(false);
-		panel.add(details);
+			details = new JButton("Ver detalles");
+			details.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					Party selectedParty = list.getSelectedValue();
+					DetallesSala dialog = new DetallesSala(selectedParty, own);
+					dialog.setVisible(true);
+				}
+			});
+			details.setEnabled(false);
+			panel.add(details);
 		
-		join = new JButton("Unirse a sala");
-		join.setEnabled(false);
-		join.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				joinParty(list.getSelectedValue(), playerName);
-			}
-		});
-		panel.add(join);
+			join = new JButton("Unirse a sala");
+			join.setEnabled(false);
+			join.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					joinParty(list.getSelectedValue(), playerName);
+				}
+			});
+			panel.add(join);
 		
-		JButton update = new JButton("Actualizar");
-		update.addActionListener(new ActionListener() {
-			public void actionPerformed(ActionEvent e) {
-				timer.schedule(new UpdateTask(dlm, oos, ois), 0);
-			}
-		});
-		panel.add(update);
+			JButton update = new JButton("Actualizar");
+			update.addActionListener(new ActionListener() {
+				public void actionPerformed(ActionEvent e) {
+					timer.schedule(new UpdateTask(dlm, oos, ois), 0);
+				}
+			});
+			panel.add(update);
 		
-		list.addListSelectionListener(new ListSelectionListener() {
-			public void valueChanged(ListSelectionEvent e) {
-				boolean selected = list.getSelectedIndex() != -1;
-				join.setEnabled(selected);
-				details.setEnabled(selected);
-			}
-		});
-		timer.schedule(new UpdateTask(dlm, oos, ois), 0, 15000);
+			list.addListSelectionListener(new ListSelectionListener() {
+				public void valueChanged(ListSelectionEvent e) {
+					boolean selected = list.getSelectedIndex() != -1;
+					join.setEnabled(selected);
+					details.setEnabled(selected);
+				}
+			});
+			timer.schedule(new UpdateTask(dlm, oos, ois), 0, 15000);
+		}
 	}
 	
 	private void createParty(String name) {
@@ -213,6 +222,8 @@ public class SelectParty extends JFrame implements Callable<PartyListener>{
 
 	@Override
 	public PartyListener call() throws Exception {
+		if(aborted)
+			return null;
 		try {
 			this.setVisible(true);
 			cd.await();

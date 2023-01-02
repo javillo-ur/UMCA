@@ -60,6 +60,7 @@ public class ClientGame extends JFrame implements Runnable{
 	private CountDownLatch waitCreateBoard = new CountDownLatch(1);
 	private CountDownLatch waitGetBoard = new CountDownLatch(1);
 	private CountDownLatch waitEndGame = new CountDownLatch(1);
+	private CountDownLatch waitEndProgram = new CountDownLatch(1);
 	private CountDownLatch waitAction = new CountDownLatch(1);
 	
 	private WaitingWindow waitingWindow = null;
@@ -86,7 +87,7 @@ public class ClientGame extends JFrame implements Runnable{
 		es = Executors.newCachedThreadPool(new ThreadFactory() {
 			@Override
 			public Thread newThread(Runnable r) {
-				Thread thread = Executors.defaultThreadFactory().newThread(r);
+				Thread thread = new Thread(r);
 				thread.setDaemon(true);
 				return thread;
 			}
@@ -123,8 +124,8 @@ public class ClientGame extends JFrame implements Runnable{
 			JPanel panel = new JPanel();
 			contentPanel.add(panel);
 			panel.setLayout(new GridLayout(height, width, 0, 0));
-			for(int x = 0; x < width; x++) {
-				for(int y = 0; y < height; y++) {
+			for(int y = 0; y < height; y++) {
+				for(int x = 0; x < width; x++) {
 					JButton cell = new JButton();
 					cells[x][y] = cell;
 					panel.add(cell);
@@ -135,6 +136,7 @@ public class ClientGame extends JFrame implements Runnable{
 			}
 		}
 		this.pack();
+		this.setExtendedState(MAXIMIZED_BOTH);
 	}
 
 	public synchronized void startParty() throws InterruptedException {
@@ -178,7 +180,8 @@ public class ClientGame extends JFrame implements Runnable{
 					break;
 				case CreateBoard:
 					List<String> turnNames = (List<String>) message;
-					board = new Game(turnNames);
+					Game newGame = new Game(turnNames);
+					setGame(newGame);
 					waitCreateBoard.countDown();
 					break;
 				default:
@@ -186,15 +189,6 @@ public class ClientGame extends JFrame implements Runnable{
 			}
 		} else if(message instanceof Game) {
 			setGame((Game) message);
-			if(turn == board.getTurn()) {
-				try {
-					turn();
-				} catch (InterruptedException e) {
-					e.printStackTrace();
-				} catch (BrokenBarrierException e) {
-					e.printStackTrace();
-				}
-			} 
 		} else if(message instanceof Turn) {
 			try {
 				Turn action = (Turn) message;
@@ -229,6 +223,7 @@ public class ClientGame extends JFrame implements Runnable{
 		waitCreateBoard.countDown();
 		waitGetBoard.countDown();
 		waitEndGame.countDown();
+		waitEndProgram.countDown();
 		waitAction.countDown();
 		es.shutdown();
 	}
@@ -237,10 +232,10 @@ public class ClientGame extends JFrame implements Runnable{
 		this.board = game;
 		this.txtNombreTurno.setText(board.getTurnName());
 		this.txtNumPlayers.setText(board.getNumPlayers() + "");
-		if(this.waitGetBoard.getCount() > 0)
-			waitGetBoard.countDown();
 		if(turn != game.getTurn())
 			setEnableCells(false);
+		if(this.waitGetBoard.getCount() > 0)
+			waitGetBoard.countDown();
 	}
 
 	@Override
@@ -248,6 +243,10 @@ public class ClientGame extends JFrame implements Runnable{
 		Future<PartyListener> partyTask = es.submit(new SelectParty(s, es));
 		try {
 			party = partyTask.get();
+			if(party == null) {
+				result = Result.Cancelled;
+				return;
+			}
 			hub = party.isOwner() ? new OwnerHub(es, this, party.getServerSocket(), party.getPlayerName()) 
 					: new GuestHub(es, this, party.getParty().getOwner().getAddress(), party.getOwnerPort(), 
 							party.getPlayerName());
@@ -259,10 +258,12 @@ public class ClientGame extends JFrame implements Runnable{
 				es.submit(new Runnable() {
 					@Override
 					public void run() {
-						Thread.currentThread().setName("Establecer turnos");
+						Thread.currentThread().setName("Establecer hub");
 						try {
-							((OwnerHub) hub).sendTurns();
+							((OwnerHub) hub).setGame();
 						} catch (InterruptedException | ExecutionException e) {
+							e.printStackTrace();
+						} catch (BrokenBarrierException e) {
 							e.printStackTrace();
 						}
 					}
@@ -305,23 +306,37 @@ public class ClientGame extends JFrame implements Runnable{
 					cells[x][y].setText(tile.isHot() ? "B" : tile.getNeighbourBombs() + "");
 				}
 			}
+		this.txtNombreTurno.setText(board.getTurnName());
+		this.txtNumPlayers.setText("" + board.getNumPlayers());
 	}
 
 	public void turn() throws InterruptedException, BrokenBarrierException {
 		if(board.isEnded()) {
 			if(result == Result.Error)
 				result = Result.Win;
-			waitEndGame.countDown();
+			es.submit(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						waitEndProgram.await();
+						hub.signalEndGame();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+			waitEndProgram.countDown();
+		} else {
+			if(board.isInitialised())
+				updateCells();
+			setEnableCells(true);
 		}
-		if(board.isInitialised())
-			updateCells();
-		setEnableCells(true);
 	}
 	
 	public void setEnableCells(boolean enabled) {
 		for(int x = 0; x < width; x++)
 			for(int y = 0; y < height; y++)
-				cells[x][y].setEnabled(enabled);
+				cells[x][y].setEnabled(enabled && cells[x][y].getText().equals("X"));
 	}
 	
 	public Result getResult() {
@@ -333,11 +348,25 @@ public class ClientGame extends JFrame implements Runnable{
 		Tile tile = board.click(x, y);
 		if(tile.isHot()) {
 			result = Result.Lose;
-			waitEndGame.countDown();
+			es.submit(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						waitEndProgram.await();
+						hub.signalEndGame();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					}
+				}
+			});
 		}
 		hub.send(board.lastTurnSummary());
 		updateCells();
 		setEnableCells(false);
 		waitAction.countDown();
+	}
+	
+	public void endParty() {
+		waitEndGame.countDown();
 	}
 }

@@ -4,8 +4,11 @@ import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.concurrent.BrokenBarrierException;
+import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 
@@ -15,7 +18,9 @@ public class OwnerHub extends MessageHub{
 	private ServerSocket ss;
 	private List<ConnectionManager> conns = new LinkedList<ConnectionManager>();
 	private List<String> players = new LinkedList<String>();
-	private int connection = 0;
+	private int nextPort = 0;
+	
+	private CyclicBarrier endGame;
 	
 	public OwnerHub(ExecutorService es, ClientGame clientGame, ServerSocket ss, String ownName) {
 		super(es, clientGame, ownName);
@@ -31,7 +36,7 @@ public class OwnerHub extends MessageHub{
 				while(!Thread.interrupted()) {
 					try {
 						Socket client = ss.accept();
-						ConnectionManager cm = new ConnectionManager(client, es, connection++, ownName, true, hub);
+						ConnectionManager cm = new ConnectionManager(client, es, nextPort++, ownName, true, hub);
 						synchronized(conns) {
 							conns.add(cm);
 							cm.start();
@@ -69,20 +74,35 @@ public class OwnerHub extends MessageHub{
 	
 	@Override
 	public void receiveMessage(Object readMessage, int port) throws InterruptedException {
-		super.receiveMessage(readMessage, -1);
-		for(ConnectionManager cm : conns) {
-			if(cm.getIndex() != port)
-				cm.send(readMessage);
+		if(readMessage instanceof ControlMessage && ((ControlMessage)readMessage) == ControlMessage.OutOfGame) {
+			es.submit(new Runnable() {
+				@Override
+				public void run() {
+					try {
+						endGame.await();
+					} catch (InterruptedException e) {
+						e.printStackTrace();
+					} catch (BrokenBarrierException e) {
+						e.printStackTrace();
+					}
+				}
+			});
+		} else {
+			super.receiveMessage(readMessage, -1);
+			for(ConnectionManager cm : conns) {
+				if(cm.getIndex() != port)
+					cm.send(readMessage);
+			}
 		}
 	}
 
-	public void sendTurns() throws InterruptedException, ExecutionException {
+	public void setGame() throws InterruptedException, ExecutionException, BrokenBarrierException {
+		endGame = new CyclicBarrier(nextPort + 1);
 		List<Integer> turns = new ArrayList<Integer>(conns.size() + 1);
 		for(int i = 0; i < conns.size(); i++)
 			turns.add(i);
 		turns.add(-1);
-		//ToDo: que se barajee
-		//Collections.shuffle(turns);
+		Collections.shuffle(turns);
 		int i = 0;
 		for(int turn : turns) {
 			if(turn == -1)
@@ -101,5 +121,30 @@ public class OwnerHub extends MessageHub{
 		else {
 			receiveMessage(turnNames, -1);
 		}
+		endGame.await();
+		for(ConnectionManager conn : conns) {
+			try {
+				conn.killSignal();
+			} catch (IOException e) {
+				e.printStackTrace();
+			}
+		}
+		endParty();
+	}
+	
+	@Override
+	public void signalEndGame() throws InterruptedException {
+		es.submit(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					endGame.await();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} catch (BrokenBarrierException e) {
+					e.printStackTrace();
+				}
+			}
+		});
 	}
 }

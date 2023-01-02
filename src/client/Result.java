@@ -1,5 +1,5 @@
 package client;
 
 public enum Result {
-	Win, Lose, Error
+	Win, Lose, Error, Cancelled
 }
