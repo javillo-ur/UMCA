@@ -8,8 +8,6 @@ import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
 
 public class Board implements Serializable{
 	private static final long serialVersionUID = 1L;
@@ -102,47 +100,22 @@ public class Board implements Serializable{
 	public Tile click(int x, int y) {
 		Tile ret = get(x, y);
 		ret.setDisplayed();
-		if(ret.getNeighbourBombs() == 0) {
-			ExecutorService es = Executors.newCachedThreadPool(new ThreadFactory() {
-				@Override
-				public Thread newThread(Runnable r) {
-					Thread thread = new Thread(r);
-					thread.setDaemon(true);
-					return thread;
-				}
-			});
+		if(!ret.isHot() && ret.getNeighbourBombs() == 0) {
 			for(Tile neighbour : ret.getNeighbours()) {
 				if(!neighbour.isDisplayed()) {
-					es.submit(new Runnable() {
-						@Override
-						public void run() {
-							Thread.currentThread().setName("Expandir click");
-							propagateClick(neighbour, es);
-						}
-					});
+					propagateClick(neighbour);
 				}
-			}
-			try {
-				es.awaitTermination(5, TimeUnit.SECONDS);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
 			}
 		}
 		return ret;
 	}
 	
-	private void propagateClick(Tile tile, ExecutorService es) {
+	private void propagateClick(Tile tile) {
 		tile.setDisplayed();
 		if(tile.getNeighbourBombs() == 0) {
 			for(Tile neighbour : tile.getNeighbours()) {
 				if(!neighbour.isDisplayed()) {
-					es.submit(new Runnable() {
-						@Override
-						public void run() {
-							Thread.currentThread().setName("Expandir click");
-							propagateClick(neighbour, es);
-						}
-					});
+					propagateClick(neighbour);
 				}
 			}
 		}

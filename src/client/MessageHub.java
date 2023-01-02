@@ -28,7 +28,7 @@ public abstract class MessageHub extends Thread{
 	}
 
 	public void close() {
-		window.dispose();
+		window.endParty();
 	}
 
 	public void signalEndGame() throws InterruptedException {

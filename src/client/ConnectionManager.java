@@ -118,7 +118,6 @@ public class ConnectionManager extends Thread {
 							}
 						} catch(IOException e) {
 							parent.close();
-							es.shutdown();
 						} catch (ClassNotFoundException e) {
 							e.printStackTrace();
 						} catch(InterruptedException e) {

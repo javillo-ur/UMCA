@@ -247,6 +247,7 @@ public class ClientGame extends JFrame implements Runnable{
 				result = Result.Cancelled;
 				return;
 			}
+			Thread.currentThread().setName(party.getPlayerName());
 			hub = party.isOwner() ? new OwnerHub(es, this, party.getServerSocket(), party.getPlayerName()) 
 					: new GuestHub(es, this, party.getParty().getOwner().getAddress(), party.getOwnerPort(), 
 							party.getPlayerName());
@@ -314,18 +315,7 @@ public class ClientGame extends JFrame implements Runnable{
 		if(board.isEnded()) {
 			if(result == Result.Error)
 				result = Result.Win;
-			es.submit(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						waitEndProgram.await();
-						hub.signalEndGame();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-				}
-			});
-			waitEndProgram.countDown();
+			hub.signalEndGame();
 		} else {
 			if(board.isInitialised())
 				updateCells();
@@ -348,17 +338,7 @@ public class ClientGame extends JFrame implements Runnable{
 		Tile tile = board.click(x, y);
 		if(tile.isHot()) {
 			result = Result.Lose;
-			es.submit(new Runnable() {
-				@Override
-				public void run() {
-					try {
-						waitEndProgram.await();
-						hub.signalEndGame();
-					} catch (InterruptedException e) {
-						e.printStackTrace();
-					}
-				}
-			});
+			hub.signalEndGame();
 		}
 		hub.send(board.lastTurnSummary());
 		updateCells();

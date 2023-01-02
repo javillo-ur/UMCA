@@ -131,7 +131,7 @@ public class OwnerHub extends MessageHub{
 		}
 		endParty();
 	}
-	
+
 	@Override
 	public void signalEndGame() throws InterruptedException {
 		es.submit(new Runnable() {

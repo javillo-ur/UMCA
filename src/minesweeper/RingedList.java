@@ -19,10 +19,12 @@ public class RingedList<T> implements Serializable {
 	public void addTile(T tile) {
 		if(base == null)
 			base = new RingedListBase<T>(tile);
-		else {
-			if(previous == null)
-				previous = base;
+		else if(length > 1) {
 			base.addLinkNext(tile);
+		} else {
+			previous = new RingedListBase<T>(tile);
+			previous.setNext(base);
+			base.setNext(previous);
 		}
 		length++;
 	}
@@ -43,8 +45,9 @@ public class RingedList<T> implements Serializable {
 
 	public void removeCurrent() {
 		if(previous != null) {
-			previous.setNext(base.getNext());
-			base = base.getNext();
+			RingedListBase<T> next = base.getNext();
+			previous.setNext(next);
+			base = next;
 		} else {
 			base = null;
 		}
