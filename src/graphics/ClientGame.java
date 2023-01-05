@@ -63,8 +63,6 @@ public class ClientGame extends JFrame implements Runnable{
 	private CountDownLatch waitCreateBoard = new CountDownLatch(1);
 	private CountDownLatch waitGetBoard = new CountDownLatch(1);
 	private CountDownLatch waitEndGame = new CountDownLatch(1);
-	private CountDownLatch waitEndProgram = new CountDownLatch(1);
-	private CountDownLatch waitAction = new CountDownLatch(1);
 	
 	private WaitingWindow waitingWindow = null;
 	
@@ -179,7 +177,6 @@ public class ClientGame extends JFrame implements Runnable{
 				updateCells();
 				setEnableCells(false);
 				eraseTime();
-				waitAction.countDown();
 			}
 		}
 	}
@@ -254,8 +251,6 @@ public class ClientGame extends JFrame implements Runnable{
 		waitCreateBoard.countDown();
 		waitGetBoard.countDown();
 		waitEndGame.countDown();
-		waitEndProgram.countDown();
-		waitAction.countDown();
 		es.shutdown();
 	}
 
@@ -269,6 +264,12 @@ public class ClientGame extends JFrame implements Runnable{
 			waitGetBoard.countDown();
 	}
 
+	public void waitStart() throws InterruptedException {
+		waitingWindow = new WaitingWindow(party.getPlayerName(), party.isOwner(), this);
+		waitingWindow.setVisible(true);
+		waitStart.await();
+	}
+	
 	@Override
 	public void run() {
 		Future<PartyListener> partyTask = es.submit(new SelectParty(s, es));
@@ -279,13 +280,12 @@ public class ClientGame extends JFrame implements Runnable{
 				return;
 			}
 			Thread.currentThread().setName(party.getPlayerName());
-			hub = party.isOwner() ? new OwnerHub(es, this, party.getServerSocket(), party.getPlayerName()) 
-					: new GuestHub(es, this, party.getParty().getOwner().getAddress(), party.getOwnerPort(), 
-							party.getPlayerName());
+			hub = party.isOwner() ? new OwnerHub(es, this, party) 
+					: new GuestHub(es, this, party);
 			hub.start();
-			waitingWindow = new WaitingWindow(party.getPlayerName(), party.isOwner(), this);
-			waitingWindow.setVisible(true);
-			waitStart.await();
+			
+			waitStart();
+			
 			if(party.isOwner()) {
 				es.submit(new Runnable() {
 					@Override
@@ -301,27 +301,16 @@ public class ClientGame extends JFrame implements Runnable{
 					}
 				});
 			}
+			
 			waitGetTurns.await();
+			
 			if(turn == 0) {
-				waitCreateBoard.await();
-				hub.send(board);
-				es.submit(new Runnable() {
-					@Override
-					public void run() {
-						Thread.currentThread().setName("Comenzar turno");
-						try {
-							turn();
-						} catch (InterruptedException e) {
-							e.printStackTrace();
-						} catch (BrokenBarrierException e) {
-							e.printStackTrace();
-						}	
-					}
-				});
+				firstTurn();
 			}
 			else {
 				waitGetBoard.await();
 			}
+			
 			waitEndGame.await();
 		} catch (InterruptedException e1) {
 			e1.printStackTrace();
@@ -330,15 +319,29 @@ public class ClientGame extends JFrame implements Runnable{
 		}
 	}
 	
+	private void firstTurn() throws InterruptedException {
+		waitCreateBoard.await();
+		hub.send(board);
+		es.submit(new Runnable() {
+			@Override
+			public void run() {
+				Thread.currentThread().setName("Comenzar turno");
+				try {
+					turn();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} catch (BrokenBarrierException e) {
+					e.printStackTrace();
+				}	
+			}
+		});
+	}
+	
 	private void updateCells() {
 		if(board.isInitialised()) {
-			for(int x = 0; x < width; x++)
-				for(int y = 0; y < height; y++) {
-					Tile tile = board.get(x, y);
-					if(tile.isDisplayed()) {
-						cells[x][y].setText(tile.isHot() ? "B" : tile.getNeighbourBombs() + "");
-					}
-				}
+			for(Tile update : board.getUpdates()) {
+				cells[update.getX()][update.getY()].setText(update.isHot() ? "B" : update.getNeighbourBombs() + "");
+			}
 		}
 		this.txtNombreTurno.setText(board.getTurnName());
 		this.txtNumPlayers.setText("" + board.getNumPlayers());
@@ -387,10 +390,9 @@ public class ClientGame extends JFrame implements Runnable{
 		updateCells();
 		setEnableCells(false);
 		eraseTime();
-		waitAction.countDown();
 	}
 	
 	public void endParty() {
-		waitEndGame.countDown();
+		this.waitEndGame.countDown();
 	}
 }

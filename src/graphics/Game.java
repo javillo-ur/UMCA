@@ -1,13 +1,14 @@
 package graphics;
 
 import java.io.Serializable;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.BrokenBarrierException;
 
 import minesweeper.Board;
 import minesweeper.RingedList;
 import minesweeper.Tile;
-import model.Message;
+import model.IntegerTuple;
 import model.Turn;
 
 public class Game implements Serializable{
@@ -17,22 +18,24 @@ public class Game implements Serializable{
 	
 	private int milliseconds = 10000;
 
-	private RingedList<Message> turnNames;
+	private RingedList<IntegerTuple<String>> turnNames;
 	private Board board = new Board(16, 30, 99);
 	private boolean firstClick = true;
 	
 	private int x;
 	private int y;
+	
+	private List<Tile> updates;
 
 	public Game(List<String> turnNames) {
-		this.turnNames = new RingedList<Message>();
+		this.turnNames = new RingedList<IntegerTuple<String>>();
 		int i = 0;
 		for(String name : turnNames)
-			this.turnNames.addTile(new Message(name, i++, 0));
+			this.turnNames.addTile(new IntegerTuple<String>(name, i++));
 	}
 
 	public int getTurn() {
-		return turnNames.getTile().getPort();
+		return turnNames.getTile().getInteger();
 	}
 	
 	public void nextTurn() {
@@ -40,7 +43,7 @@ public class Game implements Serializable{
 	}
 	
 	public String getTurnName() {
-		return (String) turnNames.getTile().getMessage();
+		return turnNames.getTile().getObject();
 	}
 	
 	public Tile click(int x, int y) throws InterruptedException, BrokenBarrierException {
@@ -54,6 +57,7 @@ public class Game implements Serializable{
 			firstClick = false;
 		}
 		Tile tile = board.click(x, y);
+		updates = board.getUpdates();
 		this.x = x;
 		this.y = y;
 		if(tile.isHot()) {
@@ -96,5 +100,9 @@ public class Game implements Serializable{
 		int ret = milliseconds;
 		milliseconds = (int) Math.round(ret * 0.9);
 		return ret;
+	}
+	
+	public List<Tile> getUpdates(){
+		return (updates != null) ? updates : new LinkedList<Tile>();
 	}
 }

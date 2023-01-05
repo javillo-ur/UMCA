@@ -20,6 +20,8 @@ public class Board implements Serializable{
 	
 	private RingedList<Tile> ring;
 	
+	private List<Tile> updates = new LinkedList<Tile>();
+	
 	public Board(int height, int width, int numBombs) {
 		this.height = height;
 		this.width = width;
@@ -86,7 +88,10 @@ public class Board implements Serializable{
 		RingedListBase<Tile> base = ring.getBase();
 		for(int y = 0; y < height; y++)
 			for(int x = 0; x < width; x++) {
-				tiles[x][y] = base.getTile();
+				Tile tile = base.getTile();
+				tile.setX(x);
+				tile.setY(y);
+				tiles[x][y] = tile;
 				base = base.getNext();
 			}
 		ExecutorService es = Executors.newCachedThreadPool();
@@ -100,6 +105,7 @@ public class Board implements Serializable{
 	public Tile click(int x, int y) {
 		Tile ret = get(x, y);
 		ret.setDisplayed();
+		updates.add(ret);
 		if(!ret.isHot() && ret.getNeighbourBombs() == 0) {
 			for(Tile neighbour : ret.getNeighbours()) {
 				if(!neighbour.isDisplayed()) {
@@ -112,6 +118,7 @@ public class Board implements Serializable{
 	
 	private void propagateClick(Tile tile) {
 		tile.setDisplayed();
+		updates.add(tile);
 		if(tile.getNeighbourBombs() == 0) {
 			for(Tile neighbour : tile.getNeighbours()) {
 				if(!neighbour.isDisplayed()) {
@@ -119,5 +126,11 @@ public class Board implements Serializable{
 				}
 			}
 		}
+	}
+
+	public List<Tile> getUpdates() {
+		List<Tile> ret = updates;
+		updates = new LinkedList<Tile>();
+		return ret;
 	}
 }

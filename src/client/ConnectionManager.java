@@ -4,8 +4,6 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.net.Socket;
-import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
@@ -13,10 +11,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.LinkedBlockingQueue;
 
-import model.Message;
-
 public class ConnectionManager extends Thread {
-	@SuppressWarnings("unused")
 	private Socket s;
 	private BlockingQueue<Object> queue = new LinkedBlockingQueue<Object>();
 	private ExecutorService es;
@@ -25,10 +20,7 @@ public class ConnectionManager extends Thread {
 	private ObjectOutputStream oos;
 	private ObjectInputStream ois;
 	
-	private int order = 0;
-	private int orderReceive = 0;
-	
-	private HashMap<Integer, Message> buffer = new LinkedHashMap<Integer, Message>();
+	private boolean open = true;
 	
 	private Future<String> otherName;
 	private String otherNameBuffer = null;
@@ -75,19 +67,18 @@ public class ConnectionManager extends Thread {
 			es.submit(new Runnable() {
 				@Override
 				public void run() {
-					while(!Thread.interrupted()) {
+					while(!Thread.interrupted() && open) {
 						try {
-							Message mess = new Message(queue.take(), port, order);
-							order++;
+							Object message = queue.take();
 							synchronized(oos) {
-								oos.writeObject(mess);
+								oos.writeObject(message);
 								oos.flush();
 								oos.reset();
 							}
 						} catch (InterruptedException e) {
 							e.printStackTrace();
 						} catch (IOException e) {
-							es.shutdown();
+							open = false;
 						}
 					}
 				}
@@ -96,31 +87,24 @@ public class ConnectionManager extends Thread {
 			es.submit(new Runnable() {
 				@Override
 				public void run() {
-					while(!Thread.interrupted()) {
+					while(!Thread.interrupted() && open) {
 						try {
 							Object receivedObject = ois.readObject();
 							if(receivedObject instanceof ControlMessage && ((ControlMessage) receivedObject) == ControlMessage.Kill) {
 								parent.endParty();
-							} else {
-								Message received = (Message) receivedObject;
-								if(received.getOrder() == orderReceive) {
-									orderReceive++;
-									parent.receiveMessage(received.getMessage(), port);
-									while(buffer.containsKey(orderReceive)) {
-										Message buffered = buffer.get(orderReceive);
-										buffer.remove(orderReceive);
-										parent.receiveMessage(buffered.getMessage(), port);
-										orderReceive++;
-									}
-								} else {
-									buffer.put(received.getOrder(), received);
+								try {
+									s.close();
+								} catch(IOException e) {
+									e.printStackTrace();
 								}
+							} else {
+								parent.receiveMessage(receivedObject, port);
 							}
 						} catch(IOException e) {
-							parent.close();
+							open = false;
 						} catch (ClassNotFoundException e) {
 							e.printStackTrace();
-						} catch(InterruptedException e) {
+						} catch (InterruptedException e) {
 							e.printStackTrace();
 						}
 					}
@@ -147,7 +131,6 @@ public class ConnectionManager extends Thread {
 		synchronized(oos) {
 			oos.writeObject(ControlMessage.Kill);
 			oos.flush();
-			s.close();
 		}
 	}
 }

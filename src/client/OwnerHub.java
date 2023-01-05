@@ -21,11 +21,12 @@ public class OwnerHub extends MessageHub{
 	private int nextPort = 0;
 	
 	private CyclicBarrier endGame;
-	
-	public OwnerHub(ExecutorService es, ClientGame clientGame, ServerSocket ss, String ownName) {
-		super(es, clientGame, ownName);
-		this.ss = ss;
-		players.add(ownName);
+	private CyclicBarrier killed;
+
+	public OwnerHub(ExecutorService es, ClientGame clientGame, PartyListener party) {
+		super(es, clientGame, party.getPlayerName());
+		this.ss = party.getServerSocket();
+		players.add(party.getPlayerName());
 	}
 
 	@Override
@@ -80,15 +81,19 @@ public class OwnerHub extends MessageHub{
 				public void run() {
 					try {
 						endGame.await();
+						conns.get(port).killSignal();
+						killed.await();
 					} catch (InterruptedException e) {
 						e.printStackTrace();
 					} catch (BrokenBarrierException e) {
+						e.printStackTrace();
+					} catch (IOException e) {
 						e.printStackTrace();
 					}
 				}
 			});
 		} else {
-			super.receiveMessage(readMessage, -1);
+			super.receiveMessage(readMessage, port);
 			for(ConnectionManager cm : conns) {
 				if(cm.getIndex() != port)
 					cm.send(readMessage);
@@ -97,7 +102,8 @@ public class OwnerHub extends MessageHub{
 	}
 
 	public void setGame() throws InterruptedException, ExecutionException, BrokenBarrierException {
-		endGame = new CyclicBarrier(nextPort + 1);
+		endGame = new CyclicBarrier(nextPort + 2);
+		killed = new CyclicBarrier(nextPort + 1);
 		List<Integer> turns = new ArrayList<Integer>(conns.size() + 1);
 		for(int i = 0; i < conns.size(); i++)
 			turns.add(i);
@@ -122,13 +128,7 @@ public class OwnerHub extends MessageHub{
 			receiveMessage(turnNames, -1);
 		}
 		endGame.await();
-		for(ConnectionManager conn : conns) {
-			try {
-				conn.killSignal();
-			} catch (IOException e) {
-				e.printStackTrace();
-			}
-		}
+		killed.await();
 		endParty();
 	}
 

@@ -11,12 +11,12 @@ public class GuestHub extends MessageHub{
 	private String ownerIp;
 	private int ownerPort;
 	
-	public GuestHub(ExecutorService es, ClientGame clientGame, String ownerIp, int ownerPort, String ownName) {
-		super(es, clientGame, ownName);
-		this.ownerIp = ownerIp;
-		this.ownerPort = ownerPort;
+	public GuestHub(ExecutorService es, ClientGame clientGame, PartyListener party) {
+		super(es, clientGame, party.getPlayerName());
+		this.ownerIp = party.getParty().getOwner().getAddress();
+		this.ownerPort = party.getOwnerPort();
 	}
-	
+
 	@Override
 	public void run() {
 		Socket owner;
