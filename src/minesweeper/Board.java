@@ -31,6 +31,12 @@ public class Board implements Serializable{
 		for(int i = 0; i < height*width; i++)
 			ring.addTile(new Tile());
 		Random rand = new Random();
+		
+		//Al construir el Board, se designa una posición tal que, al colocar las bombas,
+		//se garantice que será un cero. La clase RingedList implementa una lista enlazada que es
+		//en forma de anillo, con el último elemento apuntando al primero, así que el comienzo
+		//solamente está marcado por un apuntador interno, y puede "rotarse" para que en el primer
+		//click que realice el usuario, la casilla que ha seleccionado tenga un cero. 
 		blankPos = rand.nextInt(width * height);
 		List<Integer> safeSpaces = new LinkedList<Integer>();
 		for(int x = -1; x < 2; x++) {
@@ -66,6 +72,8 @@ public class Board implements Serializable{
 		return tiles[x][y];
 	}
 	
+	//Este es el método que mueve la lista de Tiles para que la casilla seleccionada en el primer
+	//click sea un 0
 	public int rectify(int x, int y, int rectification) throws InterruptedException, BrokenBarrierException {
 		if(rectification != -1) {
 			ring.move(rectification);

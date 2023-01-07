@@ -299,6 +299,8 @@ public class ClientGame extends JFrame implements Runnable{
 	
 	@Override
 	public void run() {
+		//Se lanzan las interfaces necesarias para establecer conexión con el servidor, autenticarse
+		//con él, y conseguir una partida, ya sea propia o ajena
 		Future<PartyListener> partyTask = es.submit(new SelectParty(s, es));
 		try {
 			party = partyTask.get();
@@ -307,12 +309,26 @@ public class ClientGame extends JFrame implements Runnable{
 				return;
 			}
 			Thread.currentThread().setName(party.getPlayerName());
+			
+			//El creador de la partida crea un OwnerHub, que gestiona las conexiones por sockets con
+			//cada uno de los clientes que se conecten, y estos crean un GuestHub, que gestiona la conexión
+			//con el propietario. La clase abstracta MessageHub permite que cada cliente, independientemente
+			//de su status, pueda enviar mensajes que son recibidos por todo el resto de clientes. 
+			//Esto hace la conexión agnóstica de qué cliente es el propietario de la sala y quede limpio y 
+			//guapísimo desde el punto de vista de programar el jueguito
 			hub = party.isOwner() ? new OwnerHub(es, this, party) 
 					: new GuestHub(es, this, party);
 			hub.start();
 			
+			//Cada cliente tiene unos CountDownLatch que permiten que las etapas de inicialización de la partida
+			//prosigan sin que nadie se quede atrás
 			waitStart();
 			
+			//El propietario, en su último acto de liderazgo, señaliza al hub que se debe comenzar la partida.
+			//El hub establece turnos aleatorios y los envía. A partir de este punto, se espera al fin de la
+			//partida, puesto que el jugador que recibe la señal de hacer el primer turno crea el tablero y lo
+			//distribuye, y con conocimiento del sistema de turnos, no existe necesidad de un arbitraje central,
+			//más que por motivos de seguridad que no hemos tenido en cuenta para nada
 			if(party.isOwner()) {
 				es.submit(new Runnable() {
 					@Override
@@ -329,15 +345,18 @@ public class ClientGame extends JFrame implements Runnable{
 				});
 			}
 			
+			//Se espera a recibir los turnos
 			waitGetTurns.await();
 			
+			//Si eres el primer jugador, creas el tablero y realizas el primer turno
 			if(turn == 0) {
 				firstTurn();
 			}
 			else {
+				//Si no, esperas a que el primer jugador te mande el tablero
 				waitGetBoard.await();
 			}
-			
+			//Y se espera al final de la partida
 			waitEndGame.await();
 		} catch (InterruptedException e1) {
 			e1.printStackTrace();
@@ -365,6 +384,10 @@ public class ClientGame extends JFrame implements Runnable{
 	}
 	
 	private void updateCells() {
+		//El tablero se inicializa en dos etapas, primero construyéndose, y después inicializándose. Esto está hecho
+		//porque, aunque ya se haya aleatorizado la posición de las bombas, se pueden rotar las posiciones para garantizar
+		//que el primer click siempre sea en un 0, que lo hace más satisfactorio, así que puede que las posiciones todavía
+		//no tengan una casilla asignada
 		if(board.isInitialised()) {
 			for(Tile update : board.getUpdates()) {
 				cells[update.getX()][update.getY()].setText(update.isHot() ? "B" : update.getNeighbourBombs() + "");

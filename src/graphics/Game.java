@@ -27,6 +27,11 @@ public class Game implements Serializable{
 	
 	private List<Tile> updates;
 
+	//La clase Game es la interfaz entre el juego multijugador y la clase Board, que
+	//es un juego del Buscaminas de toda la vida. Añade tema de turnos, y registra en
+	//las variables x e y la última posición clicada, para que después de cada turno,
+	//el jugador que lo ha realizado pueda enviar al resto de juegadores info sobre
+	//cómo recrear la posición del tablero.
 	public Game(List<String> turnNames, int height, int width, int bombNumber) {
 		board = new Board(height, width, bombNumber);
 		this.turnNames = new RingedList<IntegerTuple<String>>();

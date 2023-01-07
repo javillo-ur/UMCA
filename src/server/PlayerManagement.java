@@ -30,12 +30,18 @@ public class PlayerManagement implements Runnable{
 		try{
 			ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
 			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
+			
+			//El cliente especifica si es un cliente nuevo (enviando false), o llega para notificar el comienzo
+			//de una partida de la que es propietario (enviando verdadero)
 			if(dis.readBoolean()) {
 				String owner = dis.readLine();
 				comenzarPartida(owner);
 				s.close();
 				return;
 			}
+			
+			//El cliente envía un nombre, y se verifica y añade si no es repetido. Si es repetido, se le insta
+			//a introducir un nuevo nombre
 			boolean flag = true;
 			while(flag) {
 				name = dis.readLine();
@@ -56,6 +62,12 @@ public class PlayerManagement implements Runnable{
 			dos.writeBoolean(true);
 			dos.flush();
 			flag = true;
+			
+			//El cliente tiene tres opciones: ver las salas existentes, crear una, o unirse a una. Si crea una
+			//sala, proporcionará el número de puerto en el que escuchará a clientes que se quieran unir, y se
+			//desconectará. Para notificar el inicio de la partida, creará una conexión nueva.
+			//En caso de unirse a una sala nueva, el servidor proporcionará al cliente la dirección y puerto
+			//del propietario de la partida
 			while(!Thread.interrupted() && !s.isClosed() && flag) {
 				int option = dis.readInt();
 				switch(option) {
