@@ -38,4 +38,6 @@ public abstract class MessageHub extends Thread{
 	public void endParty() {
 		window.endParty();
 	}
+
+	protected abstract void notifyClosedConn();
 }

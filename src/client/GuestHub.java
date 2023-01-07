@@ -43,4 +43,9 @@ public class GuestHub extends MessageHub{
 			e1.printStackTrace();
 		}
 	}
+
+	@Override
+	protected void notifyClosedConn() {
+		window.endParty();
+	}
 }

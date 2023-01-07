@@ -79,6 +79,7 @@ public class ConnectionManager extends Thread {
 							e.printStackTrace();
 						} catch (IOException e) {
 							open = false;
+							parent.notifyClosedConn();
 						}
 					}
 				}

@@ -16,13 +16,17 @@ public class PlayerManagement implements Runnable{
 	Player player;
 	ExecutorService es;
 	
-	public PlayerManagement(Socket s, ExecutorService es) {
+	ServerLogger logger;
+	
+	public PlayerManagement(Socket s, ExecutorService es, ServerLogger sl) {
 		this.s = s;
 		this.es = es;
+		logger = sl;
 	}
 	
 	@SuppressWarnings("deprecation")
 	public void run() {
+		String name = null;
 		try{
 			ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
 			ObjectInputStream dis = new ObjectInputStream(s.getInputStream());
@@ -32,7 +36,6 @@ public class PlayerManagement implements Runnable{
 				s.close();
 				return;
 			}
-			String name = null;
 			boolean flag = true;
 			while(flag) {
 				name = dis.readLine();
@@ -42,6 +45,7 @@ public class PlayerManagement implements Runnable{
 					if(!Server.players.contains(name)) {
 						flag = false;
 						Server.players.add(name);
+						logger.addLog(name + " se ha unido");
 					} else {
 						dos.writeBoolean(false);
 						dos.flush();
@@ -69,7 +73,10 @@ public class PlayerManagement implements Runnable{
 				}
 			}
 		} catch (IOException e) {
-			e.printStackTrace();
+			if(name != null && Server.players.contains(name)) {
+				Server.players.remove(name);
+				logger.addLog(name + " se ha desconectado");
+			}
 		}
 	}
 	
@@ -88,6 +95,7 @@ public class PlayerManagement implements Runnable{
 		Server.parties.put(player.getName(), party);
 		dos.writeObject(party);
 		dos.flush();
+		logger.addLog(player.getName() + " ha creado una sala");
 	}
 	
 	@SuppressWarnings("deprecation")
@@ -105,6 +113,7 @@ public class PlayerManagement implements Runnable{
 				dos.writeBoolean(party.add(player));
 				dos.writeInt(party.getOwner().getUpdatePort());
 				dos.flush();
+				logger.addLog(player.getName() + " se ha unido a la sala de " + party.getOwner().getName());
 			}
 		}
 	}
@@ -116,9 +125,12 @@ public class PlayerManagement implements Runnable{
 				synchronized(Server.players) {
 					for(Player player : partida.getPlayers()) {
 						Server.players.remove(player.getName());
+						logger.addLog(player.getName() + " se ha desconectado");
 					}
 				}
 				Server.parties.remove(owner);
+				logger.addLog(owner + " ha iniciado la partida");
+				logger.addLog(owner + " se ha desconectado");
 			}
 		}
 	}

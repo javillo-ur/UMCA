@@ -23,6 +23,7 @@ import javax.swing.border.EmptyBorder;
 
 import org.apache.commons.lang3.time.StopWatch;
 
+import client.ClientLauncher;
 import client.ControlMessage;
 import client.GuestHub;
 import client.MessageHub;
@@ -32,7 +33,6 @@ import client.Phase;
 import client.Result;
 import minesweeper.Tile;
 import model.Turn;
-import server.Server;
 
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -42,8 +42,9 @@ import javax.swing.JTextField;
 
 public class ClientGame extends JFrame implements Runnable{
 	private static final long serialVersionUID = 1L;
-	private static final int width = 30;
-	private static final int height = 16;
+	
+	private String serverAddress;
+	private int port;
 	
 	private final JPanel contentPanel = new JPanel();
 	private PartyListener party;
@@ -66,7 +67,7 @@ public class ClientGame extends JFrame implements Runnable{
 	
 	private WaitingWindow waitingWindow = null;
 	
-	private JButton[][] cells = new JButton[width][height];
+	private JButton[][] cells;
 	
 	private MessageHub hub;
 	private JTextField txtNombreTurno;
@@ -75,17 +76,29 @@ public class ClientGame extends JFrame implements Runnable{
 	
 	private Timer timer;
 	private boolean defuse = false;
+	
+	private int width;
+	private int height;
 
 	public ClientGame(Socket s) {
+		this.width = ClientLauncher.getBoardWidth();
+		this.height = ClientLauncher.getBoardHeight();
+		cells = new JButton[width][height];
+		this.serverAddress = ClientLauncher.getServerAddress();
+		this.port = ClientLauncher.getServerPort();
+		
 		addWindowListener(new WindowAdapter() {
 			@Override
 			public void windowClosing(WindowEvent e) {
-				try {
-					hub.send(ControlMessage.CancelGame);
-				} catch (InterruptedException e1) {
-					e1.printStackTrace();
-				}
-				cancelParty();
+				forcedEndParty();
+			}
+
+			private void forcedEndParty() {
+				waitStart.countDown();
+				waitGetTurns.countDown();
+				waitGetBoard.countDown();
+				waitCreateBoard.countDown();
+				waitEndGame.countDown();
 			}
 		});
 		this.s = s;
@@ -150,7 +163,7 @@ public class ClientGame extends JFrame implements Runnable{
 		waitingWindow.dispose();
 		setVisible(true);
 		if(party.isOwner()) {
-			try (Socket s = new Socket(Server.serverAddress, Server.serverPort);
+			try (Socket s = new Socket(serverAddress, port);
 				ObjectOutputStream dos = new ObjectOutputStream(s.getOutputStream());
 				ObjectInputStream dis = new ObjectInputStream(s.getInputStream())) {
 				dos.writeBoolean(true);
@@ -189,59 +202,73 @@ public class ClientGame extends JFrame implements Runnable{
 	@SuppressWarnings("unchecked")
 	public synchronized void receiveMessage(Object message) throws InterruptedException {
 		if(message instanceof ControlMessage) {
-			switch((ControlMessage)message) {
-				case AssignTurns:
-					if(phase == Phase.Wait)
-						startParty();
-				break;
-				case CancelGame:
-					cancelParty();
-					break;
-				default:
-					break;
-			}
+			receiveControl((ControlMessage) message);
 		} else if(message instanceof List<?>) {
-			switch(phase) {
-				case Wait:
-					if(waitingWindow != null)
-						waitingWindow.addPlayer((List<String>) message);
-					break;
-				case CreateBoard:
-					List<String> turnNames = (List<String>) message;
-					Game newGame = new Game(turnNames);
-					setGame(newGame);
-					waitCreateBoard.countDown();
-					break;
-				default:
-					break;
-			}
+			receiveList((List<String>) message);
+		} else if(message instanceof Turn) {
+			receiveTurn((Turn) message);
+		} else if(message instanceof Integer) {
+			receiveInteger((int) message);
 		} else if(message instanceof Game) {
 			setGame((Game) message);
-		} else if(message instanceof Turn) {
-			try {
-				Turn action = (Turn) message;
-				board.setRectification(action.getRectification());
-				board.click(action.getX(), action.getY());
-				if(this.turn == board.getTurn()) {
-					turn();
-				} else {
-					updateCells();
-					setEnableCells(false);
-				}
-			} catch (InterruptedException | BrokenBarrierException e1) {
-				e1.printStackTrace();
-			}
-		} else if(message instanceof Integer) {
-			switch(phase) {
-				case GetTurns:
-					turn = (int)message;
-					phase = Phase.CreateBoard;
-					waitGetTurns.countDown();
-					break;
-				default:
-					break;
-			}
 		}
+	}
+	
+	private void receiveInteger(int message) {
+		switch(phase) {
+			case GetTurns:
+				turn = message;
+				phase = Phase.CreateBoard;
+				waitGetTurns.countDown();
+				break;
+			default:
+				break;
+		}
+	}
+
+	private void receiveTurn(Turn action) {
+		try {
+			board.setRectification(action.getRectification());
+			board.click(action.getX(), action.getY());
+			if(this.turn == board.getTurn()) {
+				turn();
+			} else {
+				updateCells();
+				setEnableCells(false);
+			}
+		} catch (InterruptedException | BrokenBarrierException e1) {
+			e1.printStackTrace();
+		}
+	}
+
+	private void receiveControl(ControlMessage message) throws InterruptedException {
+		switch(message) {
+			case AssignTurns:
+				if(phase == Phase.Wait)
+					startParty();
+				break;
+			case CancelGame:
+				cancelParty();
+				break;
+			default:
+				break;
+		}
+	}
+	
+	private void receiveList(List<String> message) {
+		switch(phase) {
+		case Wait:
+			if(waitingWindow != null)
+				waitingWindow.addPlayer(message);
+			break;
+		case CreateBoard:
+			Game newGame = new Game(message, ClientLauncher.getBoardHeight(), ClientLauncher.getBoardWidth(), ClientLauncher.getBombNumber());
+			setGame(newGame);
+			waitCreateBoard.countDown();
+			break;
+		default:
+			break;
+	}
 	}
 	
 	private void cancelParty() {

@@ -19,7 +19,7 @@ public class Game implements Serializable{
 	private int milliseconds = 10000;
 
 	private RingedList<IntegerTuple<String>> turnNames;
-	private Board board = new Board(16, 30, 99);
+	private Board board;
 	private boolean firstClick = true;
 	
 	private int x;
@@ -27,7 +27,8 @@ public class Game implements Serializable{
 	
 	private List<Tile> updates;
 
-	public Game(List<String> turnNames) {
+	public Game(List<String> turnNames, int height, int width, int bombNumber) {
+		board = new Board(height, width, bombNumber);
 		this.turnNames = new RingedList<IntegerTuple<String>>();
 		int i = 0;
 		for(String name : turnNames)
@@ -48,6 +49,8 @@ public class Game implements Serializable{
 	
 	public Tile click(int x, int y) throws InterruptedException, BrokenBarrierException {
 		if(x == -1) {
+			this.x = -1;
+			this.y = -1;
 			removePlayer();
 			return null;
 		}

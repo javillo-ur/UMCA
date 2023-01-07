@@ -147,4 +147,29 @@ public class OwnerHub extends MessageHub{
 			}
 		});
 	}
+
+	@Override
+	protected void notifyClosedConn() {
+		es.submit(new Runnable() {
+			@Override
+			public void run() {
+				try {
+					killed.await();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} catch (BrokenBarrierException e) {
+					e.printStackTrace();
+				}
+			}
+		});
+		try {
+			send(ControlMessage.Kill);
+			killed.await();
+			endParty();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} catch (BrokenBarrierException e) {
+			e.printStackTrace();
+		}
+	}
 }
